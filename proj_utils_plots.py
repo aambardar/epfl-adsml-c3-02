@@ -8,7 +8,7 @@ import seaborn as sns
 import pandas as pd
 import xgboost as xgb
 
-from proj_configs import MPL_STYLE_FILE, PATH_OUT_VISUALS
+from proj_configs import MPL_STYLE_FILE, PATH_OUT_VISUALS, CATEGORICAL_CARDINALITY_THRESHOLD_TYPE_ABS, CATEGORICAL_CARDINALITY_THRESHOLD_TYPE_PCT
 import proj_utils
 
 from proj_utils_logging import get_logger
@@ -50,7 +50,7 @@ def display_plot_link(filename, base_dir='plots'):
         print(f"File {filepath} not found")
     logger.debug("... FINISH")
 
-def plot_cardinality(cardinality_df, n_cat_threshold, threshold_used='ABS', type_of_cols='all', figsize=(10, 6)):
+def plot_cardinality(cardinality_df, n_cat_threshold, threshold_used=CATEGORICAL_CARDINALITY_THRESHOLD_TYPE_ABS, type_of_cols='all', figsize=(10, 6)):
     logger.debug("START ...")
     stack_colours = ['#deffd4', '#ffffff']
 
@@ -74,7 +74,7 @@ def plot_cardinality(cardinality_df, n_cat_threshold, threshold_used='ABS', type
         unique_value = cardinality_df.loc[cardinality_df.iloc[:, 0] == col_name, cardinality_df.columns[-1]].values[0]
         ax.plot(i, unique_value, '_', markeredgecolor = 'black', markersize=10, markeredgewidth=1, label=('unique_pct' if i == 0 else None))
 
-    if threshold_used == 'PCT':
+    if threshold_used == CATEGORICAL_CARDINALITY_THRESHOLD_TYPE_PCT:
         ax.axhline(y=n_cat_threshold, color='red', linestyle='-', linewidth=1, alpha=0.8, label=f'Threshold line at {n_cat_threshold}')
 
     # anchoring the legend box lower left corner to below X/Y coordinates scaled 0-to-1
