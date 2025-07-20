@@ -25,8 +25,8 @@ LOG_CONSOLE_LEVEL = 'INFO'
 
 # TODO: update data file configs
 # Data files
-TRAIN_FILE = os.path.join(PATH_DATA, 'kaggle-house-prices-train.csv')
-TEST_FILE = os.path.join(PATH_DATA, 'kaggle-house-prices-test.csv')
+TRAIN_FILE = os.path.join(PATH_DATA, 'house-prices.csv')
+TEST_FILE = os.path.join(PATH_DATA, 'house-prices-test.csv')
 
 # Stylesheet configurations
 MPL_STYLE_FILE = os.path.join(PATH_CONTENT, 'custom_mpl_stylesheet.mplstyle')
