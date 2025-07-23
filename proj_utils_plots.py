@@ -155,7 +155,7 @@ def plot_numerical_distribution(df, features):
                 axs_box.set_visible(False)
 
         plt.tight_layout()
-        proj_utils.save_and_show_link(fig,f'plot_num_distro_{n_features}feats_{proj_utils.get_current_timestamp()}.png')
+        proj_utils.save_and_show_link(fig,f'plot_num_distro_{n_features}feats_{row+1}-of-{n_rows}_{proj_utils.get_current_timestamp()}.png')
         plt.close(fig)
     logger.debug("... FINISH")
 
