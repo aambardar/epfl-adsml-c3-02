@@ -155,7 +155,8 @@ def plot_numerical_distribution(df, features):
                 axs_box.set_visible(False)
 
         plt.tight_layout()
-        plt.show()
+        proj_utils.save_and_show_link(fig,f'plot_num_distro_{n_features}feats_{proj_utils.get_current_timestamp()}.png')
+        plt.close(fig)
     logger.debug("... FINISH")
 
 def plot_categorical_distribution(df, features):
