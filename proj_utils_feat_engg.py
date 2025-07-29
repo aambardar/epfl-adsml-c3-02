@@ -229,6 +229,7 @@ def get_cardinality_df(df):
         'null_pct': (df.isnull().sum() / df.shape[0]).round(3),
         'unique_pct': (df.nunique() / df.shape[0]).round(3)
     })
+    df_cardinality = df_cardinality.sort_values('null_pct')
     logger.debug("... FINISH")
     return df_cardinality
 
