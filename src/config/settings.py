@@ -3,19 +3,17 @@ import os
 # TODO: update project name
 # Project name
 # PROJECT_NAME = 'EPFL-ADSML-C3'
-PROJECT_NAME = 'KAGGLE-HOUSE-PRICES'
+PROJECT_NAME = 'ADSML-C3-V2-HOUSE-PRICES'
 
 # OS path configuration
-PATH_DATA = 'data/'
-PATH_CONTENT = 'content/'
-PATH_SRC = 'src/'
-PATH_OUTPUT = 'out/'
-PATH_OUT_LOGS = 'out/logs/'
-PATH_OUT_MODELS = 'out/models/'
-PATH_OUT_SUBMISSIONS = 'out/submissions/'
-PATH_OUT_FEATURES = 'out/features/'
-PATH_OUT_PREDICTIONS = 'out/predictions/'
-PATH_OUT_VISUALS = 'plots/'
+PATH_DATA = '../../data/'
+PATH_SRC = '../'
+PATH_OUTPUT = '../../outputs/'
+PATH_OUT_LOGS = '../../outputs/logs/'
+PATH_OUT_MODELS = '../../outputs/models/'
+PATH_OUT_SUBMISSIONS = '../../outputs/submissions/'
+PATH_OUT_FEATURES = '../../outputs/features/'
+PATH_OUT_VISUALS = '../../outputs/figures/'
 
 # Logging configurations
 LOG_FILE = os.path.join(PATH_OUT_LOGS, f"{PROJECT_NAME}_application.log")
@@ -29,7 +27,7 @@ TRAIN_FILE = os.path.join(PATH_DATA, 'house-prices.csv')
 TEST_FILE = os.path.join(PATH_DATA, 'house-prices-test.csv')
 
 # Stylesheet configurations
-MPL_STYLE_FILE = os.path.join(PATH_CONTENT, 'custom_mpl_stylesheet.mplstyle')
+MPL_STYLE_FILE = './custom_mpl_stylesheet.mplstyle'
 
 # Feature Engineering configuration
 NUMERICAL_IMPUTATION_STRATEGY = 'mean'  # Options: 'mean', 'median', 'most_frequent'

@@ -2,12 +2,11 @@ import pandas as pd
 from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
 from sklearn.impute import SimpleImputer
-from sklearn.preprocessing import OneHotEncoder, LabelEncoder, StandardScaler
+from sklearn.preprocessing import OneHotEncoder, StandardScaler
 from sklearn.base import BaseEstimator, TransformerMixin
-import proj_utils_plots
 import numpy as np
 
-from proj_utils_logging import get_logger
+from src.utils.logging import get_logger
 logger = get_logger()
 
 # Custom Transformer

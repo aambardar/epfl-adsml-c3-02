@@ -1,29 +1,27 @@
-from colorama import Style, Fore
-
 # importing visualisation libraries and stylesheets
 import matplotlib.pyplot as plt
 import os
-from IPython.display import HTML, display, FileLink
+from IPython.display import display, FileLink
 import seaborn as sns
 import pandas as pd
 import xgboost as xgb
 
-from proj_configs import MPL_STYLE_FILE, PATH_OUT_VISUALS, CATEGORICAL_CARDINALITY_THRESHOLD_TYPE_ABS, CATEGORICAL_CARDINALITY_THRESHOLD_TYPE_PCT
-import proj_utils
+from src.config.settings import MPL_STYLE_FILE, CATEGORICAL_CARDINALITY_THRESHOLD_TYPE_ABS, CATEGORICAL_CARDINALITY_THRESHOLD_TYPE_PCT
 
-from proj_utils_logging import get_logger
+from src.utils.logging import get_logger
 logger = get_logger()
 
 plt.style.use(MPL_STYLE_FILE)
 
-class ColourStyling(object):
-    blk = Style.BRIGHT + Fore.BLACK
-    gld = Style.BRIGHT + Fore.YELLOW
-    grn = Style.BRIGHT + Fore.GREEN
-    red = Style.BRIGHT + Fore.RED
-    blu = Style.BRIGHT + Fore.BLUE
-    mgt = Style.BRIGHT + Fore.MAGENTA
-    res = Style.RESET_ALL
+class ColourStyling:
+    BOLD = '\033[1m'
+    blk = BOLD + '\033[30m'
+    gld = BOLD + '\033[33m'
+    grn = BOLD + '\033[32m'
+    red = BOLD + '\033[31m'
+    blu = BOLD + '\033[34m'
+    mgt = BOLD + '\033[35m'
+    res = '\033[0m'
 
 custColour = ColourStyling()
 

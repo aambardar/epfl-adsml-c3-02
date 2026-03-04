@@ -4,8 +4,8 @@ from IPython.display import display, FileLink
 from datetime import datetime
 import joblib
 
-from proj_configs import PATH_OUT_VISUALS
-from proj_utils_logging import get_logger
+from src.config.settings import PATH_OUT_VISUALS
+from src.utils.logging import get_logger
 
 logger = get_logger()
 

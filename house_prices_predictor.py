@@ -4,24 +4,18 @@ This script replaces the Jupyter notebook functionality in a modular way
 """
 
 import os
-import numpy as np
 import pandas as pd
 import warnings
-import logging
+from src.utils import logging, logging as log_utils
 
-import xgboost
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import mean_squared_error, r2_score
 import comet_ml
 
 # Local imports
-import proj_configs as configs
-import proj_utils as utils
-import proj_utils_data_loader as data_loader
-import proj_utils_feat_engg as feat_engg
-import proj_utils_model as model_utils
-import proj_utils_plots as plot_utils
-import proj_utils_logging as log_utils
+from src.config import settings as configs
+from src.data import loader as data_loader
+from src.features import engineering as feat_engg
+from src.models import trainer as model_utils
 
 
 class HousePricePredictor:

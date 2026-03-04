@@ -1,6 +1,6 @@
 import logging
 import os
-from proj_configs import LOG_FILE, PATH_OUT_LOGS, LOG_ROOT_LEVEL, LOG_FILE_LEVEL, LOG_CONSOLE_LEVEL, PROJECT_NAME
+from src.config.settings import LOG_FILE, PATH_OUT_LOGS, LOG_ROOT_LEVEL, LOG_FILE_LEVEL, LOG_CONSOLE_LEVEL, PROJECT_NAME
 
 
 def setup_logging():

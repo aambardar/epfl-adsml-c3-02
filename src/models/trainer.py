@@ -4,7 +4,7 @@ import os
 import joblib
 import optuna
 
-from proj_configs import RANDOM_STATE, PROJECT_NAME, PATH_OUT_MODELS
+from src.config.settings import RANDOM_STATE, PROJECT_NAME
 import mlflow
 import sqlite3
 from contextlib import contextmanager
@@ -15,11 +15,7 @@ import xgboost
 from sklearn.metrics import r2_score
 from sklearn.model_selection import KFold
 
-import proj_utils
-import proj_utils_plots
-import proj_utils_feat_engg
-
-from proj_utils_logging import get_logger
+from src.utils.logging import get_logger
 logger = get_logger()
 
 LOG_OPTUNA_RUN_LEVEL= optuna.logging.ERROR
