@@ -16,7 +16,7 @@ venv/
 .idea/
 
 # macOS metadata
-.DS_Store
+**/.DS_Store
 
 # Project runtime outputs (data, models, logs, plots)
 data/
