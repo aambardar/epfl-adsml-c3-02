@@ -6,6 +6,8 @@ from sklearn.preprocessing import OneHotEncoder, StandardScaler
 from sklearn.base import BaseEstimator, TransformerMixin
 import numpy as np
 
+from src.config.settings import CATEGORICAL_CARDINALITY_THRESHOLD_TYPE_ABS, CATEGORICAL_CARDINALITY_THRESHOLD_TYPE_PCT
+
 from src.utils.logging import get_logger
 logger = get_logger()
 
@@ -91,28 +93,71 @@ def get_cols_as_tuple(feat_categories):
             cols_cat_ordinal, n_cat_ordinal, cols_object, n_object, cols_temporal, n_temporal, cols_binary, n_binary, cols_low_cardinality, n_low_cardinality)
 
 
-def classify_columns(df, n_cat_threshold, threshold_type='ABS', cols_to_ignore=[], temporal_cols_name_pattern=[],
-                     ordinal_cols=[]):
+def _is_low_cardinality(col, df, threshold_type, n_cat_threshold):
+    """Returns True if column cardinality is below the threshold."""
+    if threshold_type == CATEGORICAL_CARDINALITY_THRESHOLD_TYPE_ABS:
+        return df[col].nunique() <= n_cat_threshold
+    count = df[col].count()
+    if count == 0:
+        return False
+    return df[col].nunique() / count <= n_cat_threshold
+
+def classify_columns(df, n_cat_threshold, threshold_type='ABS', cols_to_ignore=None, temporal_cols_name_pattern=None,
+                     ordinal_cols=None):
     """
-    Classifies the features of a DataFrame into different categories such as numerical,
-    categorical, temporal, binary, and object. The classification is based on data types
-    and thresholds for unique values.
+      Classify each column of a DataFrame into one of eight feature types based
+      on dtype, cardinality, and caller-supplied metadata.
 
-    Parameters:
-        df (DataFrame): The input DataFrame containing features to classify.
-        n_cat_threshold (float): Threshold for the number of unique values or percentage to
-        distinguish between discrete and continuous numerical features or nominal
-        and general object categories.
-        threshold_type (str): Type of threshold to use, either 'ABS' for absolute count
-        or 'PCT' for percentage relative to the number of observations in a column.
-        Defaults to 'ABS'.
+      Classification priority (applied in order):
+          1. Temporal — datetime/timedelta dtype, or name matches a temporal pattern
+          2. Ordinal — column name explicitly listed in ordinal_cols
+          3. Binary — boolean dtype, or exactly 2 unique values
+          4. Numerical — numeric dtype; further split into discrete (integer + low
+                         cardinality) vs continuous
+          5. Categorical nominal — pandas Categorical dtype
+          6. String/object — object dtype; split into nominal (low cardinality) vs object
+          7. Fallback — anything unmatched is cast to object with a warning
 
-    Returns:
-        A dictionary categorising feature names into seven classes
-        ('numerical_continuous', 'numerical_discrete', 'categorical_nominal',
-        'categorical_ordinal', 'object', 'temporal', and 'binary').
+      Another derived group, low_cardinality, is a subset of categorical_nominal
+      columns that fall below the cardinality threshold.
+
+      Parameters:
+          df (pd.DataFrame): Input DataFrame whose columns are to be classified.
+          n_cat_threshold (int | float): Cardinality threshold. Interpreted as an
+              absolute unique-value count when threshold_type='ABS', or as a
+              fraction of non-null rows when threshold_type='PCT'.
+          threshold_type (str): How to apply n_cat_threshold. 'ABS' for absolute
+              count, 'PCT' for percentage. Defaults to 'ABS'.
+          cols_to_ignore (list[str] | None): Columns to skip entirely (e.g. the
+              target variable). Defaults to None (no columns skipped).
+          temporal_cols_name_pattern (list[str] | None): Substrings to match
+              against column names to identify temporal columns by name (e.g.
+              ['Year', 'Mo']). Defaults to None.
+          ordinal_cols (list[str] | None): Column names to explicitly classify as
+              categorical_ordinal regardless of dtype. Defaults to None.
+
+      Returns:
+          dict[str, list[str]]: Keys are feature type labels, values are lists of
+              column names assigned to that type:
+              'numerical_continuous', 'numerical_discrete', 'categorical_nominal',
+              'categorical_ordinal', 'object', 'temporal', 'binary', 'low_cardinality'
+
+      Raises:
+          ValueError: If threshold_type is not 'ABS' or 'PCT'.
     """
     logger.debug("START ...")
+
+    cols_to_ignore = cols_to_ignore or []
+    temporal_cols_name_pattern = temporal_cols_name_pattern or []
+    ordinal_cols = ordinal_cols or []
+
+    valid_threshold_types = {CATEGORICAL_CARDINALITY_THRESHOLD_TYPE_ABS, CATEGORICAL_CARDINALITY_THRESHOLD_TYPE_PCT}
+    if threshold_type not in valid_threshold_types:
+        raise ValueError(f"threshold_type must be one of {valid_threshold_types}, got '{threshold_type}'")
+
+    logger.debug(f"Input: {len(df.columns)} columns | threshold_type={threshold_type} | n_cat_threshold = {n_cat_threshold}")
+    logger.debug(f"Ignoring {len(cols_to_ignore)} cols | {len(ordinal_cols)} ordinal cols pre-assigned | temporal patterns = {temporal_cols_name_pattern}")
+
     feature_types = {
         'numerical_continuous': [],
         'numerical_discrete': [],
@@ -127,15 +172,16 @@ def classify_columns(df, n_cat_threshold, threshold_type='ABS', cols_to_ignore=[
     for column in df.columns:
         # Skip target variable
         if column in cols_to_ignore:
+            logger.debug(f"  '{column}' → skipped (in cols_to_ignore)")
             continue
-
+        assigned = None
         # Check if a column is temporal based on name or type
         is_datetime = pd.api.types.is_datetime64_any_dtype(df[column])
         is_timedelta = pd.api.types.is_timedelta64_dtype(df[column])
         has_temporal_name = any(pattern in column for pattern in temporal_cols_name_pattern)
 
         # Check if a column is ordinal based on name
-        has_ordinal_match = any(column == ordinal for ordinal in ordinal_cols)
+        has_ordinal_match = column in ordinal_cols
 
         # Check if a column is boolean based on type
         is_boolean = pd.api.types.is_bool_dtype(df[column])
@@ -145,68 +191,65 @@ def classify_columns(df, n_cat_threshold, threshold_type='ABS', cols_to_ignore=[
         is_integer = pd.api.types.is_integer_dtype(df[column])
 
         # Check if a column is categorical based on type
-        is_categorical = pd.api.types.is_categorical_dtype(df[column])
+        is_categorical = isinstance(df[column].dtype, pd.CategoricalDtype)
 
         # Check if a column is string or object based on type
         is_string_object = pd.api.types.is_string_dtype(df[column])  # Checks both object and string dtypes
 
         # Temporal features
         if is_datetime or is_timedelta or has_temporal_name:
-            feature_types['temporal'].append(column)
+            assigned = 'temporal'
 
         # Ordinal features
         elif has_ordinal_match:
-            feature_types['categorical_ordinal'].append(column)
+            assigned = 'categorical_ordinal'
 
         # Binary features
         elif df[column].nunique() == 2 or is_boolean:
-            feature_types['binary'].append(column)
+            assigned = 'binary'
 
         # Numerical features
         elif is_numeric:
             # Basic heuristic: if the number of unique values is small relative to the not null values
             if is_integer:
-                if threshold_type == 'ABS':
-                    if df[column].nunique() <= n_cat_threshold:
-                        feature_types['numerical_discrete'].append(column)
-                    else:
-                        feature_types['numerical_continuous'].append(column)
-                elif threshold_type == 'PCT':
-                    if df[column].nunique() / df[column].count() <= n_cat_threshold:
-                        feature_types['numerical_discrete'].append(column)
-                    else:
-                        feature_types['numerical_continuous'].append(column)
+                if _is_low_cardinality(column, df, threshold_type, n_cat_threshold):
+                    assigned = 'numerical_discrete'
+                else:
+                    assigned = 'numerical_continuous'
             else:
-                feature_types['numerical_continuous'].append(column)
+                assigned = 'numerical_continuous'
 
         # Categorical features
         elif is_categorical:
-            feature_types['categorical_nominal'].append(column)
+            assigned = 'categorical_nominal'
 
         elif is_string_object:
             # Basic heuristic: if the number of unique values is small relative to the not null values
-            if threshold_type == 'ABS':
-                if df[column].nunique() <= n_cat_threshold:
-                    feature_types['categorical_nominal'].append(column)
-                else:
-                    feature_types['object'].append(column)
-            elif threshold_type == 'PCT':
-                if df[column].nunique() / df[column].count() <= n_cat_threshold:
-                    feature_types['categorical_nominal'].append(column)
-                else:
-                    feature_types['object'].append(column)
+            if _is_low_cardinality(column, df, threshold_type, n_cat_threshold):
+                assigned = 'categorical_nominal'
+            else:
+                assigned = 'object'
         else:
             logger.warning(f'Matching Col Type Not Found for: {column}, so casting as Object type.')
-            feature_types['object'].append(column)
+            assigned = 'object'
 
-    feature_types['low_cardinality'] = [cname for cname in df.columns
-                        if df[cname].nunique() < n_cat_threshold and
-                        df[cname].dtype == "object"]
+        feature_types[assigned].append(column)
+        logger.debug(f"  '{column}' → {assigned}")
 
-    logger.info("Feature Type Summary:")
+    feature_types['low_cardinality'] = [
+        cname for cname in df.columns
+        if cname not in cols_to_ignore
+           and df[cname].dtype == "object"
+           and _is_low_cardinality(cname, df, threshold_type, n_cat_threshold)
+    ]
+
+    logger.info("Feature classification summary:")
     for ftype, features in feature_types.items():
-        logger.info(f"{ftype.title()} Features ({len(features)}):")
-        logger.info(features)
+        logger.info(f"  {ftype:<25} : {len(features):>3} cols")
+
+    # Full feature names only in file (DEBUG)
+    for ftype, features in feature_types.items():
+        logger.debug(f"  {ftype}: {features}")
 
     logger.debug("... FINISH")
     return feature_types
