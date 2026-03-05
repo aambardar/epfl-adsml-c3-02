@@ -1,42 +1,46 @@
 import os
+from pathlib import Path
 
 # TODO: update project name
 # Project name
-# PROJECT_NAME = 'EPFL-ADSML-C3'
 PROJECT_NAME = 'ADSML-C3-V2-HOUSE-PRICES'
+# Anchor to the project root (3 levels up from src/config/settings.py)
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
-# OS path configuration
-PATH_DATA = '../../data/'
-PATH_SRC = '../'
-PATH_OUTPUT = '../../outputs/'
-PATH_OUT_LOGS = '../../outputs/logs/'
-PATH_OUT_MODELS = '../../outputs/models/'
-PATH_OUT_SUBMISSIONS = '../../outputs/submissions/'
-PATH_OUT_FEATURES = '../../outputs/features/'
-PATH_OUT_VISUALS = '../../outputs/figures/'
+# All paths derived from root
+PATH_DATA             = PROJECT_ROOT / 'data'
+PATH_DATA_RAW         = PROJECT_ROOT / 'data' / 'raw'
+PATH_DATA_PROCESSED   = PROJECT_ROOT / 'data' / 'processed'
+PATH_OUTPUT           = PROJECT_ROOT / 'outputs'
+PATH_OUT_LOGS         = PROJECT_ROOT / 'outputs' / 'logs'
+PATH_OUT_MODELS       = PROJECT_ROOT / 'outputs' / 'models'
+PATH_OUT_SUBMISSIONS  = PROJECT_ROOT / 'outputs' / 'submissions'
+PATH_OUT_FEATURES     = PROJECT_ROOT / 'outputs' / 'features'
+PATH_OUT_VISUALS      = PROJECT_ROOT / 'outputs' / 'figures'
 
 # Logging configurations
-LOG_FILE = os.path.join(PATH_OUT_LOGS, f"{PROJECT_NAME}_application.log")
+LOG_FILE     = PATH_OUT_LOGS / f"{PROJECT_NAME}_application.log"
 LOG_ROOT_LEVEL = 'DEBUG'
 LOG_FILE_LEVEL = 'DEBUG'
 LOG_CONSOLE_LEVEL = 'INFO'
 
 # TODO: update data file configs
 # Data files
-TRAIN_FILE = os.path.join(PATH_DATA, 'house-prices.csv')
-TEST_FILE = os.path.join(PATH_DATA, 'house-prices-test.csv')
+TRAIN_FILENAME = 'house-prices.csv'
+TEST_FILENAME = 'house-prices-test.csv'
+TRAIN_FILE = PATH_DATA_RAW / TRAIN_FILENAME
+TEST_FILE = PATH_DATA_RAW / TEST_FILENAME
 
 # Stylesheet configurations
-MPL_STYLE_FILE = './custom_mpl_stylesheet.mplstyle'
+MPL_STYLE_FILE    = PROJECT_ROOT / 'src' / 'config' / 'custom_mpl_stylesheet.mplstyle'
 
 # Feature Engineering configuration
 NUMERICAL_IMPUTATION_STRATEGY = 'mean'  # Options: 'mean', 'median', 'most_frequent'
 CATEGORICAL_IMPUTATION_STRATEGY = 'most_frequent'  # Options: 'most_frequent', 'constant'
 
 # Path for saving models
-MODEL_PATH = os.path.join(os.path.dirname(__file__), 'models')
 MODEL_FILENAME = 'trained_model.pkl'
-BEST_MODEL_PATH = os.path.join(MODEL_PATH, MODEL_FILENAME)
+BEST_MODEL_PATH   = PATH_OUT_MODELS / MODEL_FILENAME
 
 # Other configurations
 RANDOM_STATE = 43
