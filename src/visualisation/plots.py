@@ -7,7 +7,7 @@ import pandas as pd
 import xgboost as xgb
 
 from src.config.settings import MPL_STYLE_FILE, CATEGORICAL_CARDINALITY_THRESHOLD_TYPE_ABS, CATEGORICAL_CARDINALITY_THRESHOLD_TYPE_PCT
-
+from src.utils.io import save_file, save_and_show_link, get_current_timestamp
 from src.utils.logging import get_logger
 logger = get_logger()
 
@@ -77,7 +77,7 @@ def plot_cardinality(cardinality_df, n_cat_threshold, threshold_used=CATEGORICAL
 
     # anchoring the legend box lower left corner to below X/Y coordinates scaled 0-to-1
     plt.legend(bbox_to_anchor=(1.0, 0))
-    proj_utils.save_and_show_link(fig, f'plot_cardinality_{type_of_cols}_{proj_utils.get_current_timestamp()}.png')
+    save_and_show_link(fig, f'plot_cardinality_{type_of_cols}_{get_current_timestamp()}.png')
     plt.close(fig)
     logger.debug("... FINISH")
 
@@ -153,7 +153,7 @@ def plot_numerical_distribution(df, features):
                 axs_box.set_visible(False)
 
         plt.tight_layout()
-        proj_utils.save_and_show_link(fig,f'plot_num_distro_{n_features}feats_{row+1}-of-{n_rows}_{proj_utils.get_current_timestamp()}.png')
+        save_and_show_link(fig,f'plot_num_distro_{n_features}feats_{row+1}-of-{n_rows}_{get_current_timestamp()}.png')
         plt.close(fig)
     logger.debug("... FINISH")
 
@@ -187,7 +187,7 @@ def plot_categorical_distribution(df, features):
 
     plt.tight_layout()
     # plt.show()
-    proj_utils.save_and_show_link(fig, f'plot_cat_distro_{n_features}feats_{proj_utils.get_current_timestamp()}.png')
+    save_and_show_link(fig, f'plot_cat_distro_{n_features}feats_{get_current_timestamp()}.png')
     plt.close(fig)
     logger.debug("... FINISH")
 
@@ -267,7 +267,7 @@ def plot_relationship_to_target(df, features, target, trend_type=None):
 
     plt.tight_layout()
     # plt.show()
-    proj_utils.save_and_show_link(fig, f'plot_relate_{n_features}feats_to_target_{target}_{proj_utils.get_current_timestamp()}.png')
+    save_and_show_link(fig, f'plot_relate_{n_features}feats_to_target_{target}_{get_current_timestamp()}.png')
     plt.close(fig)
     logger.debug("... FINISH")
 
@@ -299,7 +299,7 @@ def plot_metrics_snapshot(model_metrics, model_type=None):
 
     plt.tight_layout()
 
-    proj_utils.save_and_show_link(fig, f'plot_metrics_{proj_utils.get_current_timestamp()}.png')
+    save_and_show_link(fig, f'plot_metrics_{get_current_timestamp()}.png')
     plt.close(fig)
     logger.debug("... FINISH")
 
@@ -349,7 +349,7 @@ def plot_correlation_with_target(df, target):
 
     plt.tight_layout()
 
-    proj_utils.save_and_show_link(fig, f'plot_corr_with_{target}_{proj_utils.get_current_timestamp()}.png', dpi=600)
+    save_and_show_link(fig, f'plot_corr_with_{target}_{get_current_timestamp()}.png', dpi=600)
 
     # prevent matplotlib from displaying the chart every time we call this function
     plt.close(fig)

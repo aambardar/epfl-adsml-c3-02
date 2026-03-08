@@ -15,6 +15,7 @@ lines.solid_capstyle: butt      # Makes a square ending of the line stopping at 
 # Grid style
 axes.grid: True                 # display grid or not
 axes.grid.axis: y               # which axis the grid should apply to
+axes.facecolor: fafaf7          # grid face color
 grid.linewidth: 0.25            # in points
 grid.color: D3D3D3              # grid color
 axes.axisbelow: True            # Sets axis gridlines below lines and patches.
@@ -44,12 +45,13 @@ ytick.minor.size: 0
 figure.subplot.left: 0.08       # the left side of the subplots of the figure
 figure.subplot.right: 0.95      # the right side of the subplots of the figure
 figure.subplot.bottom: 0.07     # the bottom of the subplots of the figure
+figure.facecolor: fafaf7        # figure face color
 figure.figsize: 16, 11          # figure size in inches
 figure.dpi: 123                 # figure dots per inch
 
 # Properties for saving the figure. Ensure a high DPI when saving so we have a good resolution.
-savefig.dpi:       300          # figure dots per inch or 'figure'
-savefig.facecolor: white        # figure face color when saving
+savefig.dpi:       200          # figure dots per inch or 'figure'
+savefig.facecolor: fafaf7       # figure face color when saving
 savefig.bbox:      tight        # {tight, standard}
 savefig.pad_inches:   0.2       # padding when bbox is set to tight
 

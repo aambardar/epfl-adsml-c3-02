@@ -257,21 +257,15 @@ def classify_columns(df, n_cat_threshold, threshold_type='ABS', cols_to_ignore=N
 
 def get_cardinality_df(df):
     # Create a cardinality DF that captures pct of not null and null values, along with pct of unique values
-
-    # Iteration 1 used was an inefficient for loop
-    # df_cardinality = pd.DataFrame(columns=['col_name', 'notnull_pct', 'null_pct', 'unique_pct'])
-    # for col in df_raw.columns:
-    #     df_cardinality.loc[len(df_cardinality)] = [col, round(1-df_raw[col].isnull().sum()/df_raw.shape[0], 3), round(df_raw[col].isnull().sum()/df_raw.shape[0], 3), round(df_raw[col].nunique()/df_raw.shape[0], 3)]
-
-    # Iteration 2 was further optimised used vectorised operations
     logger.debug("START ...")
+    null_counts = df.isnull().sum()
     df_cardinality = pd.DataFrame({
         'col_name': df.columns,
-        'notnull_pct': (1 - df.isnull().sum() / df.shape[0]).round(3),
-        'null_pct': (df.isnull().sum() / df.shape[0]).round(3),
-        'unique_pct': (df.nunique() / df.shape[0]).round(3)
+        'notnull_pct': (1 - null_counts / df.shape[0]).round(3).values,
+        'null_pct': (null_counts / df.shape[0]).round(3).values,
+        'unique_pct': (df.nunique() / df.shape[0]).round(3).values,
     })
-    df_cardinality = df_cardinality.sort_values('null_pct')
+    df_cardinality = df_cardinality.sort_values('null_pct').reset_index(drop=True)
     logger.debug("... FINISH")
     return df_cardinality
 
