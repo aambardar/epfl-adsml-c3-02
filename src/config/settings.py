@@ -51,3 +51,38 @@ CATEGORICAL_CARDINALITY_THRESHOLD_TYPE_ABS = 'ABS'
 CATEGORICAL_CARDINALITY_THRESHOLD_ABS_VAL = 20
 CATEGORICAL_CARDINALITY_THRESHOLD_TYPE_PCT = 'PCT'
 CATEGORICAL_CARDINALITY_THRESHOLD_PCT_VAL = 0.1
+
+# Ordinal Encoding Mappings
+ORDINAL_CATEGORIES = {
+    # Irregular < Regular
+    'LotShape': ['IR3', 'IR2', 'IR1', 'Reg'],
+
+    # Fewer utilities < All public
+    'Utilities': ['ELO', 'NoSeWa', 'NoSewr', 'AllPub'],
+
+    # Gentle < Moderate < Severe slope
+    'LandSlope': ['Gtl', 'Mod', 'Sev'],
+
+    # Already numeric 1-10
+    'OverallQual': [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+    'OverallCond': [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+
+    # Po < Fa < TA < Gd < Ex (standard quality scale)
+    'ExterQual': ['Po', 'Fa', 'TA', 'Gd', 'Ex'],
+    'ExterCond': ['Po', 'Fa', 'TA', 'Gd', 'Ex'],
+    'BsmtQual': ['Po', 'Fa', 'TA', 'Gd', 'Ex'],
+    'BsmtCond': ['Po', 'Fa', 'TA', 'Gd', 'Ex'],
+    'HeatingQC': ['Po', 'Fa', 'TA', 'Gd', 'Ex'],
+    'KitchenQual': ['Po', 'Fa', 'TA', 'Gd', 'Ex'],
+    'FireplaceQu': ['Po', 'Fa', 'TA', 'Gd', 'Ex'],
+    'GarageQual': ['Po', 'Fa', 'TA', 'Gd', 'Ex'],
+    'GarageCond': ['Po', 'Fa', 'TA', 'Gd', 'Ex'],
+    'PoolQC': ['Fa', 'TA', 'Gd', 'Ex'],  # no 'Po' in data
+
+    # No exposure < Minimum < Average < Good
+    'BsmtExposure': ['No', 'Mn', 'Av', 'Gd'],
+
+    # Unfinished < Low Quality < Rec < Below Avg < Avg < Good Living Quarters
+    'BsmtFinType1': ['Unf', 'LwQ', 'Rec', 'BLQ', 'ALQ', 'GLQ'],
+    'BsmtFinType2': ['Unf', 'LwQ', 'Rec', 'BLQ', 'ALQ', 'GLQ'],
+}

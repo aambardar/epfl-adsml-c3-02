@@ -2,11 +2,11 @@ import pandas as pd
 from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
 from sklearn.impute import SimpleImputer
-from sklearn.preprocessing import OneHotEncoder, StandardScaler
+from sklearn.preprocessing import OneHotEncoder, StandardScaler, OrdinalEncoder
 from sklearn.base import BaseEstimator, TransformerMixin
 import numpy as np
 
-from src.config.settings import CATEGORICAL_CARDINALITY_THRESHOLD_TYPE_ABS, CATEGORICAL_CARDINALITY_THRESHOLD_TYPE_PCT
+from src.config.settings import CATEGORICAL_CARDINALITY_THRESHOLD_TYPE_ABS, CATEGORICAL_CARDINALITY_THRESHOLD_TYPE_PCT, ORDINAL_CATEGORIES
 
 from src.utils.logging import get_logger
 logger = get_logger()
@@ -270,54 +270,98 @@ def get_cardinality_df(df):
     return df_cardinality
 
 
-def create_pproc_pipeline(cols_num, cols_cat, cols_temporal):
+def create_pproc_pipeline(cols_num, cols_cat, cols_ord_cat, cols_temporal):
+    """
+    Build a sklearn ColumnTransformer preprocessing pipeline for four column groups.
+
+    Each group gets its own sub-pipeline:
+      - Numeric    : median imputation → standard scaling
+      - Categorical: most-frequent imputation → one-hot encoding
+      - Ordinal    : most-frequent imputation → ordinal encoding (order from ORDINAL_CATEGORIES)
+      - Temporal   : median imputation → year-to-age transformation (YearTransformer)
+
+    Parameters
+    ----------
+    cols_num : list[str]
+        Continuous and discrete numeric columns.
+    cols_cat : list[str]
+        Nominal categorical columns (low-cardinality strings / pandas Categorical).
+    cols_ord_cat : list[str]
+        Ordinal categorical columns. Every column must have an entry in
+        ORDINAL_CATEGORIES defining the category order (low → high).
+    cols_temporal : list[str]
+        Year columns to be converted to age by YearTransformer.
+
+    Returns
+    -------
+    sklearn.compose.ColumnTransformer
+        Fitted-ready preprocessor; pass to a downstream Pipeline with a model.
+
+    Raises
+    ------
+    ValueError
+        If any column in cols_ord_cat is missing from ORDINAL_CATEGORIES.
+    """
     logger.debug("START ...")
-    # imputer to replace nulls with the most frequent value
-    imputer_cat_freq = SimpleImputer(strategy='most_frequent')
-    # imputer to replace nulls with the most frequent value
-    imputer_num_med = SimpleImputer(strategy='median')
-    # imputer to replace nulls with the mean value
-    imputer_num_mean = SimpleImputer(strategy='mean')
-    # one-hot encoding
+
+    # Validate all ordinal columns have an explicitly defined category order
+    missing = [c for c in cols_ord_cat if c not in ORDINAL_CATEGORIES]
+    if missing:
+        raise ValueError(f"No category order defined for ordinal cols: {missing}")
+
+    # Build the ordered categories list aligned to cols_ord_cat column order
+    ordinal_categories = [ORDINAL_CATEGORIES[col] for col in cols_ord_cat]
+
+    # Imputers
+    imputer_num_med = SimpleImputer(strategy='median')  # for numeric and temporal cols
+    imputer_cat_freq = SimpleImputer(strategy='most_frequent')  # for categorical and ordinal cols
+
+    # Encoders
     encoder_ohe = OneHotEncoder(handle_unknown='ignore', sparse_output=False)
-    # feature scaling
+    encoder_ordinal = OrdinalEncoder(
+        categories=ordinal_categories,
+        handle_unknown='use_encoded_value',
+        unknown_value=-1
+    )
+
+    # Scaler
     scaler_std = StandardScaler()
-    # custom transformer to replace Year with age
+
+    # Custom transformer: converts year columns to age (current_year - year)
     trans_year = YearTransformer()
 
-    # custom transformer to split one date time column into its constituting elements (data, month and year)
-    # transform_date = DateTransformer()
-
-    numeric_columns = cols_num
-    categorical_columns = cols_cat
-    temporal_columns = cols_temporal
-
-    # Numeric pipeline with missing value imputation and scaling
+    # Numeric pipeline: impute missing with median, then standardise
     pipe_numeric_transformer = Pipeline(steps=[
-        # ('imputer', imputer_num_med),
-        ('imputer', imputer_num_mean),
+        ('imputer', imputer_num_med),
         ('scaler', scaler_std)
     ])
 
-    # Categorical pipeline with missing value imputation and one-hot encoding
+    # Categorical pipeline: impute missing with most frequent, then one-hot encode
     pipe_categorical_transformer = Pipeline(steps=[
         ('imputer', imputer_cat_freq),
         ('encoder', encoder_ohe)
     ])
 
-    # Temporal pipeline to replace year with age
-    pipe_temporal_transformer = Pipeline(steps=[
-        # ('imputer', imputer_num_med),
+    # Ordinal pipeline: impute missing with most frequent, then ordinal encode
+    # preserving the low→high order defined in ORDINAL_CATEGORIES
+    pipe_ordinal_transformer = Pipeline(steps=[
         ('imputer', imputer_cat_freq),
+        ('encoder', encoder_ordinal)
+    ])
+
+    # Temporal pipeline: impute missing with median, then convert year to age
+    pipe_temporal_transformer = Pipeline(steps=[
+        ('imputer', imputer_num_med),
         ('trans_tempo', trans_year)
     ])
 
-    # Combine preprocessing steps
+    # Combine all sub-pipelines; drop any column not explicitly assigned to a group
     preprocessor = ColumnTransformer(
         transformers=[
-            ('num', pipe_numeric_transformer, numeric_columns),
-            ('cat', pipe_categorical_transformer, categorical_columns),
-            ('tempo', pipe_temporal_transformer, temporal_columns)
+            ('num', pipe_numeric_transformer, cols_num),
+            ('cat', pipe_categorical_transformer, cols_cat),
+            ('ord', pipe_ordinal_transformer, cols_ord_cat),
+            ('tempo', pipe_temporal_transformer, cols_temporal)
         ],
         remainder='passthrough'
     )
