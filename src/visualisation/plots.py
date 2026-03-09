@@ -68,206 +68,209 @@ def plot_cardinality(cardinality_df, n_cat_threshold, threshold_used=CATEGORICAL
     ax.set_title(f'Cardinality plot of {type_of_cols} columns')
 
     # Add a black dash for each bar to signify 'unique_pct' values
-    for i, col_name in enumerate(cardinality_df.iloc[:,0]):
-        unique_value = cardinality_df.loc[cardinality_df.iloc[:, 0] == col_name, cardinality_df.columns[-1]].values[0]
-        ax.plot(i, unique_value, '_', markeredgecolor = 'black', markersize=10, markeredgewidth=1, label=('unique_pct' if i == 0 else None))
+    for i, _ in enumerate(cardinality_df.iloc[:, 0]):
+        unique_value = cardinality_df.iloc[i, -1]
+        ax.plot(i, unique_value, '_', markeredgecolor='black', markersize=10,
+                markeredgewidth=1, label=('unique_pct' if i == 0 else None))
 
+    # Threshold line only applicable for pct-based threshold (abs can't map to 0-1 scale)
     if threshold_used == CATEGORICAL_CARDINALITY_THRESHOLD_TYPE_PCT:
         ax.axhline(y=n_cat_threshold, color='red', linestyle='-', linewidth=1, alpha=0.8, label=f'Threshold line at {n_cat_threshold}')
 
     # anchoring the legend box lower left corner to below X/Y coordinates scaled 0-to-1
-    plt.legend(bbox_to_anchor=(1.0, 0))
+    ax.legend(bbox_to_anchor=(1.0, 0), loc='lower left')
     save_and_show_link(fig, f'plot_cardinality_{type_of_cols}_{get_current_timestamp()}.png')
     plt.close(fig)
     logger.debug("... FINISH")
 
+
 def plot_numerical_distribution(df, features):
+    """
+    Plots histogram and boxplot pairs for each numerical feature, paginated into
+    rows of up to n_cols features per figure.
+
+    Args:
+        df (pd.DataFrame): DataFrame containing the feature columns.
+        features (list[str]): List of numerical feature column names to plot.
+
+    Returns:
+        None
+    """
     logger.debug("START ...")
-    if features is None or len(features) == 0:
+    if not features:
         logger.debug("... FINISH")
         return
 
-    # Calculate the number of rows and columns needed
     n_features = len(features)
-    n_cols = 6  # Maximum cols to have in the plot grid
+    n_cols = 6
     n_rows = (n_features + n_cols - 1) // n_cols
 
     feat_idx = 0
     for row in range(n_rows):
-        # Calculate number of columns for current row
-        cols_in_row = min(n_cols, n_features - row * n_cols)
+        cols_in_row = min(n_cols, n_features - feat_idx)
 
-        # Create a figure and axes for the current row
-        fig, axs = plt.subplots(2, cols_in_row,
-                               gridspec_kw={"height_ratios": (0.7, 0.3)},
-                               figsize=(4*cols_in_row, 4))
+        fig, axs = plt.subplots(
+            2, cols_in_row,
+            gridspec_kw={"height_ratios": (0.7, 0.3)},
+            figsize=(4 * cols_in_row, 4)
+        )
 
-        # Make axs 2D if it's 1D (happens when cols_in_row = 1)
+        # Ensure axs is always 2D (edge case: single column)
         if cols_in_row == 1:
             axs = axs.reshape(2, 1)
 
         for j in range(cols_in_row):
+            current_feature = features[feat_idx]
             axs_hist = axs[0, j]
             axs_box = axs[1, j]
 
-            if feat_idx < len(features):
-                current_feature = features[feat_idx]
+            # Histogram
+            axs_hist.hist(df[current_feature], color='lightgray',
+                          edgecolor='gray', linewidth=0.5, bins=50)
+            axs_hist.set_title(f'Plots for {current_feature}', fontsize=10)
+            axs_hist.spines['top'].set_visible(False)
+            axs_hist.spines['right'].set_visible(False)
 
-                # Plot histogram
-                axs_hist.hist(df[current_feature], color='lightgray',
-                            edgecolor='gray', linewidth=0.5, bins=50)
-                axs_hist.set_title(f'Plots for {current_feature}', fontsize=10)
-                axs_hist.spines['top'].set_visible(False)
-                axs_hist.spines['right'].set_visible(False)
+            # Boxplot (horizontal, aligned beneath histogram)
+            axs_box.boxplot(
+                df[current_feature],
+                vert=False,
+                widths=0.7,
+                patch_artist=True,
+                medianprops={'color': 'black'},
+                flierprops={'marker': 'o', 'markerfacecolor': 'gray', 'markersize': 2},
+                whiskerprops={'linewidth': 0.5},
+                boxprops={'facecolor': 'lightgray', 'color': 'gray', 'linewidth': 1},
+                capprops={'linewidth': 1}
+            )
+            axs_box.set_yticks([])
+            axs_box.spines['left'].set_visible(False)
+            axs_box.spines['right'].set_visible(False)
+            axs_box.spines['top'].set_visible(False)
 
-                # Plot boxplot
-                axs_box.boxplot(
-                    df[current_feature],
-                    vert=False,
-                    widths=0.7,
-                    patch_artist=True,
-                    medianprops={'color': 'black'},
-                    flierprops={
-                        'marker': 'o',
-                        'markerfacecolor': 'gray',
-                        'markersize': 2
-                    },
-                    whiskerprops={'linewidth': 0.5},
-                    boxprops={
-                        'facecolor': 'lightgray',
-                        'color': 'gray',
-                        'linewidth': 1
-                    },
-                    capprops={'linewidth': 1}
-                )
+            feat_idx += 1
 
-                axs_box.set(yticks=[])
-                axs_box.spines['left'].set_visible(False)
-                axs_box.spines['right'].set_visible(False)
-                axs_box.spines['top'].set_visible(False)
-
-                feat_idx += 1
-            else:
-                # Hide empty subplots
-                axs_hist.set_visible(False)
-                axs_box.set_visible(False)
-
-        plt.tight_layout()
-        save_and_show_link(fig,f'plot_num_distro_{n_features}feats_{row+1}-of-{n_rows}_{get_current_timestamp()}.png')
+        fig.tight_layout()
+        save_and_show_link(fig,
+                           f'plot_num_distro_{n_features}feats_{row + 1}-of-{n_rows}_{get_current_timestamp()}.png')
         plt.close(fig)
+
     logger.debug("... FINISH")
 
+
 def plot_categorical_distribution(df, features):
+    """
+    Plots value count bar charts for each categorical feature, paginated into
+    rows of up to n_cols features per figure.
+
+    Args:
+        df (pd.DataFrame): DataFrame containing the feature columns.
+        features (list[str]): List of categorical feature column names to plot.
+
+    Returns:
+        None
+    """
     logger.debug("START ...")
-    if features is None or len(features) == 0:
+    if not features:
         logger.debug("... FINISH")
         return
 
-    # Calculate the number of rows and columns needed
     n_features = len(features)
-    n_cols = 6  # Maximum cols to have in the plot grid
+    n_cols = 6
     n_rows = (n_features + n_cols - 1) // n_cols
 
-    # Create a figure with a proper subplot grid
-    fig, axs = plt.subplots(n_rows, n_cols, figsize=(4*n_cols, 3*n_rows))
-    axs = axs.ravel() # Flatten the array for easier indexing
+    fig, axs = plt.subplots(n_rows, n_cols, figsize=(4 * n_cols, 3 * n_rows))
+    axs = axs.ravel()
 
     for idx, feature in enumerate(features):
         value_counts = df[feature].value_counts().sort_index()
-        axs[idx].bar(range(len(value_counts)), value_counts.values, color='lightgray', edgecolor='gray', linewidth=0.5)
-
-        # Set both the tick positions and labels
-        axs[idx].set_xticks(range(len(value_counts)))  # Set tick positions
-        axs[idx].set_xticklabels(value_counts.index, rotation=45, ha='right')  # Set tick labels
+        axs[idx].bar(
+            range(len(value_counts)), value_counts.values,
+            color='lightgray', edgecolor='gray', linewidth=0.5
+        )
+        axs[idx].set_xticks(range(len(value_counts)))
+        axs[idx].set_xticklabels(value_counts.index, rotation=45, ha='right')
         axs[idx].set_title(f'Distribution of {feature}', fontsize=10)
+        axs[idx].spines['top'].set_visible(False)
+        axs[idx].spines['right'].set_visible(False)
 
-    # Hide empty subplots
-    for idx in range(len(features), len(axs)):
+    # Hide unused subplot slots in the last row
+    for idx in range(n_features, len(axs)):
         axs[idx].set_visible(False)
 
-    plt.tight_layout()
-    # plt.show()
+    fig.tight_layout()
     save_and_show_link(fig, f'plot_cat_distro_{n_features}feats_{get_current_timestamp()}.png')
     plt.close(fig)
     logger.debug("... FINISH")
 
+
 def plot_relationship_to_target(df, features, target, trend_type=None):
+    """
+    Plots the distribution of the target variable across categories of each feature
+    using boxplots, with an optional mean or median trend line overlay.
+
+    Args:
+        df (pd.DataFrame): DataFrame containing the feature and target columns.
+        features (list[str]): List of categorical feature column names to plot against target.
+        target (str): Name of the target column.
+        trend_type (str, optional): Trend line to overlay — 'mean' or 'median'. Default None.
+
+    Returns:
+        None
+    """
     logger.debug("START ...")
-    if features is None or len(features) == 0:
+    if not features:
         logger.debug("... FINISH")
         return
+
+    if trend_type is not None and trend_type not in ('mean', 'median'):
+        raise ValueError(f"trend_type must be 'mean', 'median', or None — got '{trend_type}'")
 
     n_features = len(features)
     n_cols = 4
     n_rows = (n_features + n_cols - 1) // n_cols
 
-    fig, axs = plt.subplots(n_rows, n_cols, figsize=(6*n_cols, 4*n_rows))
-    axs = axs.ravel()  # Flatten the array for easier indexing
+    fig, axs = plt.subplots(n_rows, n_cols, figsize=(6 * n_cols, 4 * n_rows))
+    axs = axs.ravel()
 
     for idx, feature in enumerate(features):
-        # Group data by feature
-        grouped_data = [group[target].values for name, group in df.groupby(feature)]
+        categories = sorted(df[feature].unique())
+        grouped_data = [group[target].values for _, group in df.groupby(feature)]
 
-        # Create box plot
         axs[idx].boxplot(
             grouped_data,
             patch_artist=True,
-            medianprops={
-                'color': 'black'
-            },
-            flierprops={
-                'marker': 'o',
-                'markerfacecolor': 'gray',
-                'markersize': 2
-            },
-            whiskerprops={
-                'linewidth': 1
-            },
-            boxprops={
-                'facecolor': 'lightgray',
-                'color': 'gray',
-                'linewidth': 1
-            },
-            capprops={
-                'linewidth': 1
-            }
+            medianprops={'color': 'black'},
+            flierprops={'marker': 'o', 'markerfacecolor': 'gray', 'markersize': 2},
+            whiskerprops={'linewidth': 1},
+            boxprops={'facecolor': 'lightgray', 'color': 'gray', 'linewidth': 1},
+            capprops={'linewidth': 1}
         )
 
-        # Set x-ticks with feature categories
-        categories = sorted(df[feature].unique())
+        # Boxplot uses 1-based positions — set ticks explicitly to avoid FixedLocator warning
+        axs[idx].set_xticks(range(1, len(categories) + 1))
         axs[idx].set_xticklabels(categories, rotation=45, ha='right')
         axs[idx].set_title(f'Distribution of {target} by {feature}', fontsize=10)
 
-        # Add trend line if specified
         if trend_type is not None:
+            trend_values = (
+                df.groupby(feature)[target].mean() if trend_type == 'mean'
+                else df.groupby(feature)[target].median()
+            )
             axs_twin_y = axs[idx].twinx()
-
-            if trend_type == 'mean':
-                trend_values = df.groupby(feature)[target].mean()
-            elif trend_type == 'median':
-                trend_values = df.groupby(feature)[target].median()
-
-            # Plot trend line
             axs_twin_y.plot(
                 range(1, len(categories) + 1),
                 trend_values.values,
-                color='red',
-                marker='o',
-                markersize=3,
-                linewidth=1,
-                alpha=0.6
+                color='red', marker='o', markersize=3, linewidth=1, alpha=0.6
             )
-
-            # Set trend line axis properties
             axs_twin_y.tick_params(axis='y', colors='red')
 
-    # Hide empty subplots
-    for idx in range(len(features), len(axs)):
+    for idx in range(n_features, len(axs)):
         axs[idx].set_visible(False)
 
-    plt.tight_layout()
-    # plt.show()
-    save_and_show_link(fig, f'plot_relate_{n_features}feats_to_target_{target}_{get_current_timestamp()}.png')
+    fig.tight_layout()
+    save_and_show_link(fig,
+                       f'plot_relate_{n_features}feats_to_target_{target}_{get_current_timestamp()}.png')
     plt.close(fig)
     logger.debug("... FINISH")
 
@@ -303,58 +306,50 @@ def plot_metrics_snapshot(model_metrics, model_type=None):
     plt.close(fig)
     logger.debug("... FINISH")
 
+
+
 def plot_correlation_with_target(df, target):
     """
-    Plots the correlation of each variable in the dataframe with the 'demand' column.
+    Plots the Pearson correlation of each feature in df with the target column.
 
     Args:
-    - df (pd.DataFrame): DataFrame containing the data, including a 'demand' column.
-    - save_path (str, optional): Path to save the generated plot. If not specified, plot won't be saved.
+      df (pd.DataFrame): DataFrame containing features and the target column.
+      target (str): Name of the target column.
 
     Returns:
-    - None (Displays the plot on a Jupyter window)
+      fig (plt.Figure): The matplotlib Figure object. Caller is responsible for closing it.
     """
     logger.debug("START ...")
-    # Compute correlations between all variables and 'demand'
-    correlations = df.corr()[target].drop(target).sort_values()
 
-    # Generate a color palette from red to green
-    colors = sns.diverging_palette(10, 130, as_cmap=True)
-    color_mapped = correlations.map(colors)
+    # Correlate each feature against target; drop target's self-correlation
+    correlations = df.corrwith(df[target]).drop(target).sort_values()
 
-    # Set Seaborn style
-    # sns.set_style(
-    #     "whitegrid", {"axes.facecolor": "#f6f3ec", "grid.linewidth": 2}
-    # )  # Light grey background and thicker grid lines
+    # Diverging palette: red (negative) → white (zero) → green (positive)
+    # Normalize to [-1, 1] so zero always maps to the neutral midpoint
+    cmap = sns.diverging_palette(10, 130, as_cmap=True)
+    norm = plt.Normalize(vmin=-1, vmax=1)
+    color_mapped = [cmap(norm(v)) for v in correlations.values]
 
-    # Create a bar plot
-    fig = plt.figure(figsize=(12, 8))
-    plt.barh(correlations.index, correlations.values, color=color_mapped)
+    fig, ax = plt.subplots(figsize=(12, 8))
+    ax.barh(correlations.index, correlations.values, color=color_mapped)
 
-    # Set labels and title with increased font size
-    plt.title(f"Correlation with target: {target}", fontsize=18)
-    plt.xlabel("Correlation Coefficient", fontsize=16)
-    plt.ylabel("Variable", fontsize=16)
-    plt.xticks(fontsize=14)
-    plt.yticks(fontsize=14)
-    plt.grid(axis="x")
+    ax.set_title(f"Correlation with target: {target}", fontsize=18)
+    ax.set_xlabel("Correlation Coefficient", fontsize=16)
+    ax.set_ylabel("Variable", fontsize=16)
+    ax.tick_params(axis='both', labelsize=14)
 
-    fig.patch.set_facecolor('#f6f3ec')  # Set figure background color
-    ax = plt.gca()  # get current axes
-    ax.set_facecolor('#f6f3ec')
+    # Override stylesheet default (y-axis grid) — x-axis grid suits a horizontal bar chart
+    ax.grid(axis='x')
+
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
     ax.spines['bottom'].set_visible(False)
     ax.spines['left'].set_visible(False)
 
-    plt.tight_layout()
-
+    fig.tight_layout()
     save_and_show_link(fig, f'plot_corr_with_{target}_{get_current_timestamp()}.png', dpi=600)
 
-    # prevent matplotlib from displaying the chart every time we call this function
-    plt.close(fig)
     logger.debug("... FINISH")
-
     return fig
 
 def plot_residuals(preds_y, true_y, save_path=None):  # noqa: D417
