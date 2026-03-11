@@ -60,6 +60,62 @@ class YearTransformer(BaseEstimator, TransformerMixin):
         """Return output feature names; derived from original_columns_ set during fit."""
         return np.array([f'{col}_years_old' for col in self.original_columns_])
 
+def print_feature_expansion(pproc_pipe):
+  """
+  Prints a formatted mapping of input columns to output features for each
+  transformer branch in the fitted ColumnTransformer.
+
+  Parameters
+  ----------
+  pproc_pipe : fitted sklearn ColumnTransformer
+  """
+  logger.debug("START ...")
+  total_in, total_out = 0, 0
+
+  for branch_name, transformer, columns in pproc_pipe.transformers_:
+      if branch_name == 'remainder':
+          continue
+
+      print(f"\n  [{branch_name.upper()} branch]")
+      print(f"  {'INPUT COLUMN':<30} {'N_OUT':>6}  OUTPUT FEATURE NAMES")
+      print(f"  {'-'*80}")
+
+      last_step = transformer.steps[-1][1] if isinstance(transformer, Pipeline) else transformer
+
+      for i, col in enumerate(columns):
+
+          # OHE: 1 input → N outputs (one per category value)
+          if isinstance(last_step, OneHotEncoder):
+              out_names = [f"{col}_{cat}" for cat in last_step.categories_[i]]
+              n_out = len(out_names)
+              preview = ', '.join(out_names[:4]) + (f'  ... +{n_out - 4} more' if n_out > 4 else '')
+
+          # OrdinalEncoder: 1-to-1, value replaced with integer rank
+          elif isinstance(last_step, OrdinalEncoder):
+              out_names = [col]
+              n_out = 1
+              preview = f"{col}  → integer rank"
+
+          # YearTransformer: 1-to-1, year replaced with age
+          elif isinstance(last_step, YearTransformer):
+              out_names = [f"{col}_years_old"]
+              n_out = 1
+              preview = out_names[0]
+
+          # StandardScaler and others: 1-to-1 passthrough with scaling
+          else:
+              out_names = [col]
+              n_out = 1
+              preview = col
+
+          print(f"  {col:<30} {n_out:>6}  {preview}")
+          total_in += 1
+          total_out += n_out
+
+  print(f"\n  {'='*80}")
+  print(f"  TOTAL: {total_in} input columns  →  {total_out} output columns")
+  logger.debug("... FINISH")
+
 
 def get_cols_as_tuple(feat_categories):
     logger.debug("START ...")
