@@ -9,56 +9,56 @@ import numpy as np
 from src.config.settings import CATEGORICAL_CARDINALITY_THRESHOLD_TYPE_ABS, CATEGORICAL_CARDINALITY_THRESHOLD_TYPE_PCT, ORDINAL_CATEGORIES
 
 from src.utils.logging import get_logger
+from src.visualisation.plots import beautify
+
 logger = get_logger()
 
-# Custom Transformer
+
+# Custom Transformer: converts year columns to age (reference_year_ - year_value).
 class YearTransformer(BaseEstimator, TransformerMixin):
     def __init__(self):
         pass
 
     def fit(self, X, y=None):
-        # Store original column names during fit
+        """Capture column names, input shape, and reference year from training data."""
+        # Store column names for consistent numpy input handling in transform
         if hasattr(X, 'columns'):
-            self.original_columns = X.columns.tolist()
+            self.original_columns_ = X.columns.tolist()
         elif isinstance(X, np.ndarray):
-            # If X is a numpy array, try to get column names from the ColumnTransformer
-            # This assumes the transformer is part of a ColumnTransformer
+            # Feature names may be injected by ColumnTransformer via feature_names_in_
             if hasattr(self, 'feature_names_in_'):
-                self.original_columns = self.feature_names_in_
+                self.original_columns_ = list(self.feature_names_in_)
             else:
-                self.original_columns = [f'col_{i}' for i in range(X.shape[1])]
+                self.original_columns_ = [f'col_{i}' for i in range(X.shape[1])]
+
+        # Capture reference year at fit time so all subsequent transforms
+        # (train, val, inference) compute age consistently against the same year
+        self.reference_year_ = pd.Timestamp.now().year
+
+        # Required by sklearn's check_is_fitted and validation utilities
+        self.n_features_in_ = X.shape[1]
+        self.is_fitted_ = True
         return self
 
     def transform(self, X, y=None):
-        # Convert numpy array to pandas DataFrame if necessary
+        """Replace each year column with its age relative to reference_year_."""
+        # Use stored column names for numpy input to stay consistent with fit
         if isinstance(X, np.ndarray):
-            X = pd.DataFrame(X, columns=[f'col_{i}' for i in range(X.shape[1])])
+            X = pd.DataFrame(X, columns=self.original_columns_)
         else:
             X = pd.DataFrame(X)
 
+        # Compute age for each column and drop the original year column
         X_transformed = X.copy()
-        current_year = pd.Timestamp.now().year
-        columns_to_drop = []
+        for col in self.original_columns_:
+            X_transformed[col + '_years_old'] = self.reference_year_ - X_transformed[col]
+        X_transformed = X_transformed.drop(columns=self.original_columns_)
 
-        for base_col_name in X_transformed.columns:
-            transformed_col_name = base_col_name + '_years_old'
-            X_transformed[transformed_col_name] = current_year - X_transformed[base_col_name]
-            columns_to_drop.append(base_col_name)
-            # print(f"Processed column: {base_col_name} -> {transformed_col_name}")
-
-        # Drop all original columns at once (more efficient than dropping inside loop)
-        X_transformed.drop(columns_to_drop, axis=1, inplace=True)
-
-        # store feature names
-        self.feature_names = X_transformed.columns
         return X_transformed.values  # Return numpy array to maintain scikit-learn compatibility
 
-    def set_output(self, *, transform=None):
-        super().set_output(transform=transform)
-        return self
-
     def get_feature_names_out(self, input_features=None):
-        return self.feature_names
+        """Return output feature names; derived from original_columns_ set during fit."""
+        return np.array([f'{col}_years_old' for col in self.original_columns_])
 
 
 def get_cols_as_tuple(feat_categories):
@@ -312,10 +312,6 @@ def create_pproc_pipeline(cols_num, cols_cat, cols_ord_cat, cols_temporal):
     # Build the ordered categories list aligned to cols_ord_cat column order
     ordinal_categories = [ORDINAL_CATEGORIES[col] for col in cols_ord_cat]
 
-    # Imputers
-    imputer_num_med = SimpleImputer(strategy='median')  # for numeric and temporal cols
-    imputer_cat_freq = SimpleImputer(strategy='most_frequent')  # for categorical and ordinal cols
-
     # Encoders
     encoder_ohe = OneHotEncoder(handle_unknown='ignore', sparse_output=False)
     encoder_ordinal = OrdinalEncoder(
@@ -332,26 +328,26 @@ def create_pproc_pipeline(cols_num, cols_cat, cols_ord_cat, cols_temporal):
 
     # Numeric pipeline: impute missing with median, then standardise
     pipe_numeric_transformer = Pipeline(steps=[
-        ('imputer', imputer_num_med),
+        ('imputer', SimpleImputer(strategy='median')),
         ('scaler', scaler_std)
     ])
 
     # Categorical pipeline: impute missing with most frequent, then one-hot encode
     pipe_categorical_transformer = Pipeline(steps=[
-        ('imputer', imputer_cat_freq),
+        ('imputer', SimpleImputer(strategy='most_frequent')),
         ('encoder', encoder_ohe)
     ])
 
     # Ordinal pipeline: impute missing with most frequent, then ordinal encode
     # preserving the low→high order defined in ORDINAL_CATEGORIES
     pipe_ordinal_transformer = Pipeline(steps=[
-        ('imputer', imputer_cat_freq),
+        ('imputer', SimpleImputer(strategy='most_frequent')),
         ('encoder', encoder_ordinal)
     ])
 
     # Temporal pipeline: impute missing with median, then convert year to age
     pipe_temporal_transformer = Pipeline(steps=[
-        ('imputer', imputer_num_med),
+        ('imputer', SimpleImputer(strategy='median')),
         ('trans_tempo', trans_year)
     ])
 
@@ -386,7 +382,7 @@ def get_final_features(final_pipeline, X_train):
     pproc = final_pipeline.named_steps['preprocessor']
 
     for i, (name, trans, column) in enumerate(pproc.transformers_):
-        print(f'Transformer#{i + 1} name is:{proj_utils_plots.beautify(str(name))}')
+        print(f'Transformer#{i + 1} name is:{beautify(str(name))}')
         if type(trans) is Pipeline:
             print('\t Is a Pipeline')
             trans = trans.steps[-1][1]
@@ -398,14 +394,14 @@ def get_final_features(final_pipeline, X_train):
             feature_names.extend(tmp_feature_names)
             column_names.extend(column)
             print(
-                f'\t Transformer input = {proj_utils_plots.beautify(str(len(column)), 1)} and output = {proj_utils_plots.beautify(str(len(tmp_feature_names)), 1)}')
+                f'\t Transformer input = {beautify(str(len(column)), 1)} and output = {beautify(str(len(tmp_feature_names)), 1)}')
         elif hasattr(trans, 'get_feature_names'):
             print('\t Has get_feature_names')
             tmp_feature_names = trans.get_feature_names(column)
             feature_names.extend(tmp_feature_names)
             column_names.extend(column)
             print(
-                f'\t Transformer input = {proj_utils_plots.beautify(str(len(column)), 1)} and output = {proj_utils_plots.beautify(str(len(tmp_feature_names)), 1)}')
+                f'\t Transformer input = {beautify(str(len(column)), 1)} and output = {beautify(str(len(tmp_feature_names)), 1)}')
         else:
             print('\t Doesn\'t have get_feature_names or get_feature_names_out')
             if name == 'remainder' and trans == 'passthrough':
@@ -414,16 +410,16 @@ def get_final_features(final_pipeline, X_train):
                 feature_names.extend(tmp_remainder_names)
                 column_names.extend(column)
                 print(
-                    f'\t Transformer input = {proj_utils_plots.beautify(str(len(column)), 1)} and output = {proj_utils_plots.beautify(str(len(column)), 1)}')
+                    f'\t Transformer input = {beautify(str(len(column)), 1)} and output = {beautify(str(len(column)), 1)}')
             else:
                 print('\t > Not a remainder passthrough')
                 tmp_feature_names = column
                 feature_names.extend(tmp_feature_names)
                 column_names.extend(column)
                 print(
-                    f'\t Transformer input = {proj_utils_plots.beautify(str(len(column)), 1)} and output = {proj_utils_plots.beautify(str(len(tmp_feature_names)), 1)}')
+                    f'\t Transformer input = {beautify(str(len(column)), 1)} and output = {beautify(str(len(tmp_feature_names)), 1)}')
 
     print(
-        f'\nThe total feature space has: {proj_utils_plots.beautify(str(len(feature_names)))} features. Their names being:\n{proj_utils_plots.beautify(str(feature_names), 2)}')
+        f'\nThe total feature space has: {beautify(str(len(feature_names)))} features. Their names being:\n{beautify(str(feature_names), 2)}')
     return column_names, feature_names
     logger.debug("... FINISH")
