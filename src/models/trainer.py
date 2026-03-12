@@ -16,6 +16,10 @@ from sklearn.metrics import r2_score
 from sklearn.model_selection import KFold
 
 from src.utils.logging import get_logger
+from src.utils.io import save_file
+from src.visualisation.plots import plot_residuals
+from src.features.engineering import create_final_pipeline
+
 logger = get_logger()
 
 LOG_OPTUNA_RUN_LEVEL= optuna.logging.ERROR
@@ -114,17 +118,17 @@ def get_or_create_experiment(experiment_name):
 
 def save_features(filename, base_dir_path, features):
     logger.debug("START ...")
-    proj_utils.save_file('feature', filename, base_dir_path, features)
+    save_file('feature', filename, base_dir_path, features)
     logger.debug("... FINISH")
 
 def save_model(filename, base_dir_path, model):
     logger.debug("START ...")
-    proj_utils.save_file('model', filename, base_dir_path, model)
+    save_file('model', filename, base_dir_path, model)
     logger.debug("... FINISH")
 
 def save_hyperparams(filename, base_dir_path, hyperparams):
     logger.debug("START ...")
-    proj_utils.save_file('hyperparams', filename, base_dir_path, hyperparams)
+    save_file('hyperparams', filename, base_dir_path, hyperparams)
     logger.debug("... FINISH")
 
 def champion_callback(study, frozen_trial):
@@ -166,7 +170,7 @@ def run_hyperparam_tuning_lasso(X_train, y_train, X_val, y_val, pproc_pipeline, 
             }
 
             model_lasso = Lasso(**params_lasso)
-            final_pipe = proj_utils_feat_engg.create_final_pipeline(pproc_pipe, model_lasso)
+            final_pipe = create_final_pipeline(pproc_pipe, model_lasso)
 
             # print(f'Trial {proj_utils_plots.beautify(str(trial.number))} Scoring Starts...')
             cv_split_kf = KFold(n_splits=5, shuffle=True, random_state=RANDOM_STATE)
@@ -222,10 +226,10 @@ def run_hyperparam_tuning_lasso(X_train, y_train, X_val, y_val, pproc_pipeline, 
         )
 
         model = Lasso(**study.best_params)
-        final_pipe = proj_utils_feat_engg.create_final_pipeline(pproc_pipe, model)
+        final_pipe = create_final_pipeline(pproc_pipe, model)
         final_pipe.fit(X_train, y_train)
         y_val_pred = final_pipe.predict(X_val)
-        residuals = proj_utils_plots.plot_residuals(y_val_pred, y_val)
+        residuals = plot_residuals(y_val_pred, y_val)
         mlflow.log_figure(residuals, "residuals.png")
 
         val_mse = mean_squared_error(y_val, y_val_pred)
@@ -262,7 +266,7 @@ def old_run_hyperparam_tuning_xgb(X_train, y_train, X_val, y_val, pproc_pipeline
             }
 
             model_xgb = xgboost.XGBRegressor(**params_xgb, n_jobs=-1, enable_categorical=True)
-            final_pipe = proj_utils_feat_engg.create_final_pipeline(pproc_pipe, model_xgb)
+            final_pipe = create_final_pipeline(pproc_pipe, model_xgb)
 
             # Add validation checks
             # if X_train.isnull().any().any() or y_train.isnull().any():
@@ -327,12 +331,12 @@ def old_run_hyperparam_tuning_xgb(X_train, y_train, X_val, y_val, pproc_pipeline
         )
 
         model = xgboost.XGBRegressor(**study.best_params)
-        final_pipe = proj_utils_feat_engg.create_final_pipeline(pproc_pipe, model)
+        final_pipe = create_final_pipeline(pproc_pipe, model)
         final_pipe.fit(X_train, y_train)
         y_val_pred = final_pipe.predict(X_val)
 
         # Log the residual plot
-        residuals = proj_utils_plots.plot_residuals(y_val_pred, y_val)
+        residuals = plot_residuals(y_val_pred, y_val)
         mlflow.log_figure(residuals, "residuals.png")
 
         # Log the feature importance's plot
@@ -377,7 +381,7 @@ def run_hyperparam_tuning_rfc(X_train, y_train, X_val, y_val, pproc_pipeline, ex
             }
 
             model_rfc = RandomForestClassifier(**params_rfc)
-            final_pipe = proj_utils_feat_engg.create_final_pipeline(pproc_pipe, model_rfc)
+            final_pipe = create_final_pipeline(pproc_pipe, model_rfc)
 
             # print(f'Trial {proj_utils_plots.beautify(str(trial.number))} Scoring Starts...')
             cv_split_kf = KFold(n_splits=5, shuffle=True, random_state=RANDOM_STATE)
@@ -433,10 +437,10 @@ def run_hyperparam_tuning_rfc(X_train, y_train, X_val, y_val, pproc_pipeline, ex
         )
 
         model = RandomForestClassifier(**study.best_params)
-        final_pipe = proj_utils_feat_engg.create_final_pipeline(pproc_pipe, model)
+        final_pipe = create_final_pipeline(pproc_pipe, model)
         final_pipe.fit(X_train, y_train)
         y_val_pred = final_pipe.predict(X_val)
-        residuals = proj_utils_plots.plot_residuals(y_val_pred, y_val)
+        residuals = plot_residuals(y_val_pred, y_val)
         mlflow.log_figure(residuals, "residuals.png")
 
         val_mse = mean_squared_error(y_val, y_val_pred)
@@ -473,7 +477,7 @@ def run_hyperparam_tuning_xgb(X_train_features, y_train, X_val_features, y_val, 
             }
 
             model_xgb = xgboost.XGBRegressor(**params_xgb, n_jobs=-1, enable_categorical=True)
-            # final_pipe = proj_utils_feat_engg.create_final_pipeline(pproc_pipe, model_xgb)
+            # final_pipe = create_final_pipeline(pproc_pipe, model_xgb)
 
             # Add validation checks
             # if X_train.isnull().any().any() or y_train.isnull().any():
@@ -535,16 +539,16 @@ def run_hyperparam_tuning_xgb(X_train_features, y_train, X_val_features, y_val, 
         )
 
         model = xgboost.XGBRegressor(**study.best_params)
-        # final_pipe = proj_utils_feat_engg.create_final_pipeline(pproc_pipe, model)
+        # final_pipe = create_final_pipeline(pproc_pipe, model)
         model.fit(X_train_features, y_train)
         y_val_pred = model.predict(X_val_features)
 
         # Log the residual plot
-        residuals = proj_utils_plots.plot_residuals(y_val_pred, y_val)
+        residuals = plot_residuals(y_val_pred, y_val)
         mlflow.log_figure(residuals, "residuals.png")
 
         # Log the feature importance's plot
-        # importances = proj_utils_plots.plot_feature_importance(model, booster=study.best_params.get("booster"))
+        # importances = plot_feature_importance(model, booster=study.best_params.get("booster"))
         # mlflow.log_figure(figure=importances, artifact_file="feature_importances.png")
 
         val_mse = mean_squared_error(y_val, y_val_pred)
@@ -626,7 +630,7 @@ def run_hyperparam_tuning_xgb_exp(X_train_features, y_train, X_val_features, y_v
     # y_val_pred = model.predict(X_val_features)
     #
     # # Create and log residual plot
-    # residuals = proj_utils_plots.plot_residuals(y_val_pred, y_val)
+    # residuals = plot_residuals(y_val_pred, y_val)
     # experiment.log_figure("residuals.png", residuals)
     #
     # # Log validation metrics
@@ -663,7 +667,7 @@ def train_optimal_model(optimised_study, train_features, train_label, experiment
     model.fit(train_features, train_label)
 
     train_preds = model.predict(train_features)
-    residuals = proj_utils_plots.plot_residuals(train_preds, train_label)
+    residuals = plot_residuals(train_preds, train_label)
     experiment.log_figure("residuals.png", residuals)
 
     # Log metrics
