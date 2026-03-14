@@ -396,25 +396,47 @@ def plot_residuals(preds_y, true_y, save_path=None):  # noqa: D417
 
     return fig
 
-def plot_feature_importance(model, booster):
+def plot_feature_importance(pipeline, top_n: int = 30, importance_type: str = "gain"):
     """
-    Plots feature importance for an XGBoost model.
+    Plots top-N feature importances for an XGBoost pipeline, with proper feature names.
+
+    Extracts feature names from the pipeline's preprocessor step via
+    get_feature_names_out(), aligns them with the regressor's feature_importances_,
+    and renders a clean horizontal bar chart of the top-N features.
 
     Args:
-    - model: A trained XGBoost model
+        pipeline:         Fitted sklearn Pipeline containing 'preprocessor' and 'regressor' steps.
+        top_n (int):      Number of top features to display. Default 30.
+        importance_type:  'gain' (default) or 'weight'. Passed to XGBoost booster.
 
     Returns:
-    - fig: The matplotlib figure object
+        fig: The matplotlib Figure object.
     """
-    fig, ax = plt.subplots(figsize=(10, 8))
-    importance_type = "weight" if booster == "gblinear" else "gain"
-    xgb.plot_importance(
-        model,
-        importance_type=importance_type,
-        ax=ax,
-        title=f"Feature Importance based on {importance_type}",
-    )
-    plt.tight_layout()
+    preprocessor = pipeline.named_steps['preprocessor']
+    regressor    = pipeline.named_steps['regressor']
+
+    feature_names = preprocessor.get_feature_names_out()
+
+    # get_feature_importance returns a dict keyed by internal booster feature names
+    booster = regressor.get_booster()
+    scores  = booster.get_score(importance_type=importance_type)
+
+    # Booster uses 'f0', 'f1', ... — map back to real names
+    importance_series = pd.Series(
+        {feature_names[int(k[1:])]: v for k, v in scores.items()}
+    ).sort_values(ascending=True).tail(top_n)
+
+    fig, ax = plt.subplots(figsize=(10, max(6, top_n * 0.3)))
+    ax.barh(importance_series.index, importance_series.values,
+            color='steelblue', edgecolor='none')
+
+    ax.set_title(f"Top {top_n} Feature Importances ({importance_type})", fontsize=14)
+    ax.set_xlabel(f"Importance ({importance_type})", fontsize=12)
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+
+    fig.tight_layout()
+    save_and_show_link(fig, f'plot_feat_importance_top{top_n}_{get_current_timestamp()}.png')
     plt.close(fig)
 
     return fig
