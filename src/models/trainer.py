@@ -13,6 +13,7 @@ Design principles:
 """
 
 import os
+from typing import Any
 
 import joblib
 import mlflow
@@ -216,7 +217,7 @@ def run_hyperparam_tuning(
     artefact_path: str,
     num_trials: int,
     n_cv_splits: int = 5,
-) -> optuna.Study:
+) -> tuple[Any, Any]:
     """
     Generic Optuna + MLflow hyperparameter tuning loop.
 
@@ -250,8 +251,9 @@ def run_hyperparam_tuning(
 
     Returns
     -------
-    optuna.Study
-        Completed study; caller can inspect best_params, best_value, etc.
+    tuple[optuna.Study, sklearn.Pipeline]
+        (study, final_pipe) — study for Optuna inspection; final_pipe is the
+        fitted preprocessor+model pipeline ready for predict() or feature importance.
     """
     logger.info(f"[{model_name}] Tuning started | trials={num_trials} | cv_splits={n_cv_splits}")
     console.rule(f"[bold blue]{model_name} — Tuning Started[/bold blue]")
@@ -367,7 +369,7 @@ def run_hyperparam_tuning(
         )
         console.print(Panel(summary, expand=False, border_style="green"))
 
-    return study
+    return study, final_pipe
 
 
 # ===========================================================================
@@ -376,8 +378,8 @@ def run_hyperparam_tuning(
 # ===========================================================================
 
 def tune_lasso(X_train, y_train, X_val, y_val, pproc_pipeline,
-               experiment_id, run_name, artefact_path, num_trials) -> optuna.Study:
-    """Run Optuna + MLflow tuning for Lasso regression."""
+               experiment_id, run_name, artefact_path, num_trials) -> tuple:
+    """Run Optuna + MLflow tuning for Lasso regression. Returns (study, final_pipe)."""
     return run_hyperparam_tuning(
         model_name="Lasso",
         param_space_fn=lasso_param_space,
@@ -393,8 +395,8 @@ def tune_lasso(X_train, y_train, X_val, y_val, pproc_pipeline,
 
 
 def tune_xgb(X_train, y_train, X_val, y_val, pproc_pipeline,
-             experiment_id, run_name, artefact_path, num_trials) -> optuna.Study:
-    """Run Optuna + MLflow tuning for XGBoost regressor."""
+             experiment_id, run_name, artefact_path, num_trials) -> tuple:
+    """Run Optuna + MLflow tuning for XGBoost regressor. Returns (study, final_pipe)."""
     return run_hyperparam_tuning(
         model_name="XGBoost",
         param_space_fn=xgb_param_space,
@@ -410,8 +412,8 @@ def tune_xgb(X_train, y_train, X_val, y_val, pproc_pipeline,
 
 
 def tune_rfr(X_train, y_train, X_val, y_val, pproc_pipeline,
-             experiment_id, run_name, artefact_path, num_trials) -> optuna.Study:
-    """Run Optuna + MLflow tuning for Random Forest regressor."""
+             experiment_id, run_name, artefact_path, num_trials) -> tuple:
+    """Run Optuna + MLflow tuning for Random Forest regressor. Returns (study, final_pipe)."""
     return run_hyperparam_tuning(
         model_name="RandomForestRegressor",
         param_space_fn=rfr_param_space,
