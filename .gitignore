@@ -23,3 +23,8 @@ data/
 outputs/
 plots/
 mlruns/
+
+# MLflow tracking databases — runtime artefacts, machine-specific, binary
+*.db
+*.db-shm
+*.db-wal
