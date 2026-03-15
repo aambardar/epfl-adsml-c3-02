@@ -27,7 +27,7 @@ from rich.panel import Panel
 from rich import box
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.linear_model import Lasso
-from sklearn.metrics import mean_squared_error, r2_score
+from sklearn.metrics import mean_squared_error, r2_score, mean_absolute_error
 from sklearn.model_selection import KFold
 import xgboost
 
@@ -198,6 +198,114 @@ def _cross_val_rmse(
 
     return float(np.mean(rmse_scores)), float(np.std(rmse_scores))
 
+# ===========================================================================
+# Baseline model
+# ===========================================================================
+
+def run_baseline(
+  y_train: np.ndarray,
+  y_val: np.ndarray,
+  log_target: bool = False,
+  n_splits: int = 5,
+) -> dict:
+    """
+    Evaluate a mean-prediction baseline via cross-validation.
+
+    The baseline predicts the training set mean for every sample — equivalent
+    to sklearn's DummyRegressor(strategy='mean'). It requires no features and
+    performs no learning, establishing the performance floor all models must beat.
+
+    If the target was log-transformed before training, set log_target=True so
+    predictions are back-transformed (exp) before computing MAE in dollars.
+    RMSE is always reported in the same scale as y_train/y_val (log or raw).
+
+    Parameters
+    ----------
+    y_train : array-like of shape (n_samples,)
+      Training target values (raw SalePrice or log-transformed).
+    y_val : array-like of shape (n_samples,)
+      Held-out validation target values (same scale as y_train).
+    log_target : bool
+      If True, exp() is applied to predictions and actuals before computing
+      MAE so it is always reported in dollars regardless of training scale.
+      Default False.
+    n_splits : int
+      Number of KFold splits for cross-validated MAE/RMSE. Default 5.
+
+    Returns
+    -------
+    dict with keys:
+      cv_mae_mean, cv_mae_std   — cross-validated MAE in dollars
+      cv_rmse_mean, cv_rmse_std — cross-validated RMSE (training scale)
+      val_mae                   — MAE in dollars on held-out val set
+      val_rmse                  — RMSE on held-out val set (training scale)
+    """
+    logger.info(f"[Baseline] Starting | log_target={log_target} | cv_splits={n_splits}")
+    console.rule("[bold blue]Baseline — Mean Predictor[/bold blue]")
+
+    y_train = np.asarray(y_train)
+    y_val   = np.asarray(y_val)
+
+    kf = KFold(n_splits=n_splits, shuffle=True, random_state=RANDOM_STATE)
+    fold_mae, fold_rmse = [], []
+
+    for fold, (train_idx, val_idx) in enumerate(kf.split(y_train), start=1):
+      y_tr, y_vl = y_train[train_idx], y_train[val_idx]
+
+      # Baseline prediction: mean of the fold's training split
+      fold_mean = np.mean(y_tr)
+      preds     = np.full_like(y_vl, fill_value=fold_mean, dtype=float)
+
+      # Back-transform to dollars before scoring if target is log-scale
+      preds_dollars = np.exp(preds) if log_target else preds
+      actuals_dollars = np.exp(y_vl) if log_target else y_vl
+
+      fold_mae.append(mean_absolute_error(actuals_dollars, preds_dollars))
+      fold_rmse.append(np.sqrt(mean_squared_error(y_vl, preds)))  # RMSE in training scale
+
+      logger.debug(
+          f"[Baseline] Fold {fold} | MAE=${fold_mae[-1]:,.0f} | RMSE={fold_rmse[-1]:.4f}"
+      )
+
+    cv_mae_mean  = float(np.mean(fold_mae))
+    cv_mae_std   = float(np.std(fold_mae))
+    cv_rmse_mean = float(np.mean(fold_rmse))
+    cv_rmse_std  = float(np.std(fold_rmse))
+
+    # Validation set evaluation
+    val_mean          = np.mean(y_train)
+    val_preds         = np.full_like(y_val, fill_value=val_mean, dtype=float)
+    val_preds_dollars   = np.exp(val_preds) if log_target else val_preds
+    val_actuals_dollars = np.exp(y_val)     if log_target else y_val
+
+    val_mae  = mean_absolute_error(val_actuals_dollars, val_preds_dollars)
+    val_rmse = np.sqrt(mean_squared_error(y_val, val_preds))
+
+    logger.info(
+      f"[Baseline] CV MAE=${cv_mae_mean:,.0f} ± ${cv_mae_std:,.0f} | "
+      f"CV RMSE={cv_rmse_mean:.4f} ± {cv_rmse_std:.4f} | "
+      f"Val MAE=${val_mae:,.0f} | Val RMSE={val_rmse:.4f}"
+    )
+
+    # Rich summary panel
+    summary = (
+      f"Strategy     : predict mean of training set\n"
+      f"Log target   : {log_target}\n\n"
+      f"CV  MAE      : [bold yellow]${cv_mae_mean:>12,.0f} ± ${cv_mae_std:,.0f}[/bold yellow]\n"
+      f"CV  RMSE     : {cv_rmse_mean:.4f} ± {cv_rmse_std:.4f}\n\n"
+      f"Val MAE      : [bold yellow]${val_mae:>12,.0f}[/bold yellow]\n"
+      f"Val RMSE     : {val_rmse:.4f}"
+    )
+    console.print(Panel(summary, title="Baseline Results", expand=False, border_style="yellow"))
+
+    return {
+      "cv_mae_mean":  cv_mae_mean,
+      "cv_mae_std":   cv_mae_std,
+      "cv_rmse_mean": cv_rmse_mean,
+      "cv_rmse_std":  cv_rmse_std,
+      "val_mae":      val_mae,
+      "val_rmse":     val_rmse,
+    }
 
 # ===========================================================================
 # Generic hyperparameter tuning function
