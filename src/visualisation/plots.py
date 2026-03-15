@@ -4,7 +4,9 @@ import os
 from IPython.display import display, FileLink
 import seaborn as sns
 import pandas as pd
+import numpy as np
 import xgboost as xgb
+from sklearn.feature_selection import mutual_info_regression
 
 from src.config.settings import MPL_STYLE_FILE, CATEGORICAL_CARDINALITY_THRESHOLD_TYPE_ABS, CATEGORICAL_CARDINALITY_THRESHOLD_TYPE_PCT
 from src.utils.io import save_file, save_and_show_link, get_current_timestamp
@@ -306,48 +308,147 @@ def plot_metrics_snapshot(model_metrics, model_type=None):
     plt.close(fig)
     logger.debug("... FINISH")
 
+def _compute_corr_scores(df, target, method='pearson'):
+    """
+    Compute Pearson or Spearman correlation of all features against target.
+    Returns a Series sorted ascending, with target column dropped.
+    """
+    return (
+      df.corrwith(df[target], method=method)
+        .drop(target)
+        .sort_values()
+    )
 
+def _compute_mi_scores(df, target, random_state=43):
+    """
+    Compute Mutual Information scores of all features against target.
+    Median-imputes NaNs in numeric columns before computing (MI requirement).
+    Returns a Series sorted ascending.
+    """
+    features = df.drop(columns=[target])
+    y        = df[target].values
+    X        = features.apply(
+      lambda col: col.fillna(col.median()) if col.dtype.kind in 'fiu' else col
+    )
+    scores = mutual_info_regression(X, y, random_state=random_state)
+    return pd.Series(scores, index=features.columns).sort_values()
+
+
+def _render_corr_hbar(ax, series, title, xlabel, cmap, norm, show_zero_line=False):
+    """
+    Render a horizontal bar chart on ax with colour-mapped bars.
+    Handles spines, grid, labels, and optional zero-line — everything
+    that is identical across all three correlation plots.
+    """
+    color_mapped = [cmap(norm(v)) for v in series.values]
+    ax.barh(series.index, series.values, color=color_mapped)
+    ax.set_title(title, fontsize=18)
+    ax.set_xlabel(xlabel, fontsize=16)
+    ax.set_ylabel("Variable", fontsize=16)
+    ax.tick_params(axis='both', labelsize=14)
+    ax.grid(axis='x')
+    if show_zero_line:
+      ax.set_xlim(-1, 1)
+      ax.axvline(x=0, color='black', linewidth=0.8, linestyle='--')
+    for spine in ax.spines.values():
+      spine.set_visible(False)
 
 def plot_correlation_with_target(df, target):
+    """Plots Pearson correlation of each feature with the target."""
+    logger.debug("START ...")
+    scores = _compute_corr_scores(df, target, method='pearson')
+    cmap   = sns.diverging_palette(10, 130, as_cmap=True)
+    norm   = plt.Normalize(vmin=-1, vmax=1)
+
+    fig, ax = plt.subplots(figsize=(12, 8))
+    _render_corr_hbar(ax, scores, f"Pearson Correlation with target: {target}",
+               "Pearson Correlation Coefficient", cmap, norm, show_zero_line=True)
+    fig.tight_layout()
+    save_and_show_link(fig, f'plot_corr_with_{target}_{get_current_timestamp()}.png', dpi=600)
+    logger.debug("... FINISH")
+    return fig
+
+def plot_spearman_correlation_with_target(df, target):
+    """Plots Spearman rank correlation of each feature with the target."""
+    logger.debug("START ...")
+    scores = _compute_corr_scores(df, target, method='spearman')
+    cmap   = sns.diverging_palette(10, 130, as_cmap=True)
+    norm   = plt.Normalize(vmin=-1, vmax=1)
+
+    fig, ax = plt.subplots(figsize=(12, 8))
+    _render_corr_hbar(ax, scores, f"Spearman Correlation with target: {target}",
+               "Spearman Correlation Coefficient", cmap, norm, show_zero_line=True)
+    fig.tight_layout()
+    save_and_show_link(fig, f'plot_spearman_corr_with_{target}_{get_current_timestamp()}.png', dpi=600)
+    logger.debug("... FINISH")
+    return fig
+
+def plot_mutual_information_with_target(df, target, random_state=43):
+    """Plots Mutual Information score of each feature with the target."""
+    logger.debug("START ...")
+    scores = _compute_mi_scores(df, target, random_state)
+    norm   = plt.Normalize(vmin=scores.min(), vmax=scores.max())
+    cmap   = plt.cm.YlGn  # Sequential — MI has no sign, only magnitude
+
+    fig, ax = plt.subplots(figsize=(12, 8))
+    _render_corr_hbar(ax, scores, f"Mutual Information with target: {target}",
+               "Mutual Information Score", cmap, norm, show_zero_line=False)
+    fig.tight_layout()
+    save_and_show_link(fig, f'plot_mi_with_{target}_{get_current_timestamp()}.png', dpi=600)
+    logger.debug("... FINISH")
+    return fig
+
+def plot_feature_relevance_comparison(df, target, random_state=43):
     """
-    Plots the Pearson correlation of each feature in df with the target column.
+    Three-panel side-by-side comparison of Pearson, Spearman, and Mutual Information
+    scores for all features against the target variable.
+
+    All three panels share the same y-axis feature order (sorted by MI score,
+    descending top-to-bottom) so cross-panel comparison is direct. Features where
+    MI is high but Pearson/Spearman is low signal non-linear relationships.
 
     Args:
       df (pd.DataFrame): DataFrame containing features and the target column.
+                         NaN values are acceptable — MI imputes internally.
       target (str): Name of the target column.
+      random_state (int): Seed for MI estimation. Default 43.
 
     Returns:
-      fig (plt.Figure): The matplotlib Figure object. Caller is responsible for closing it.
+      fig (plt.Figure): The matplotlib Figure object.
     """
     logger.debug("START ...")
 
-    # Correlate each feature against target; drop target's self-correlation
-    correlations = df.corrwith(df[target]).drop(target).sort_values()
+    pearson  = _compute_corr_scores(df, target, method='pearson')
+    spearman = _compute_corr_scores(df, target, method='spearman')
+    mi       = _compute_mi_scores(df, target, random_state)
 
-    # Diverging palette: red (negative) → white (zero) → green (positive)
-    # Normalize to [-1, 1] so zero always maps to the neutral midpoint
-    cmap = sns.diverging_palette(10, 130, as_cmap=True)
-    norm = plt.Normalize(vmin=-1, vmax=1)
-    color_mapped = [cmap(norm(v)) for v in correlations.values]
+    # Align all three to MI's ranking order (ascending = bottom-to-top on barh)
+    shared_order = mi.sort_values(ascending=True).index
+    pearson      = pearson.reindex(shared_order)
+    spearman     = spearman.reindex(shared_order)
+    mi           = mi.reindex(shared_order)
 
-    fig, ax = plt.subplots(figsize=(12, 8))
-    ax.barh(correlations.index, correlations.values, color=color_mapped)
+    div_cmap  = sns.diverging_palette(10, 130, as_cmap=True)
+    div_norm  = plt.Normalize(vmin=-1, vmax=1)
+    mi_norm   = plt.Normalize(vmin=mi.min(), vmax=mi.max())
 
-    ax.set_title(f"Correlation with target: {target}", fontsize=18)
-    ax.set_xlabel("Correlation Coefficient", fontsize=16)
-    ax.set_ylabel("Variable", fontsize=16)
-    ax.tick_params(axis='both', labelsize=14)
+    fig, axes = plt.subplots(1, 3, figsize=(36, max(8, len(shared_order) * 0.3)))
 
-    # Override stylesheet default (y-axis grid) — x-axis grid suits a horizontal bar chart
-    ax.grid(axis='x')
+    _render_corr_hbar(axes[0], pearson,  f"Pearson vs {target}",
+               "Pearson r", div_cmap, div_norm, show_zero_line=True)
+    _render_corr_hbar(axes[1], spearman, f"Spearman vs {target}",
+               "Spearman ρ", div_cmap, div_norm, show_zero_line=True)
+    _render_corr_hbar(axes[2], mi,       f"Mutual Information vs {target}",
+               "MI Score", plt.cm.YlGn, mi_norm, show_zero_line=False)
 
-    ax.spines['top'].set_visible(False)
-    ax.spines['right'].set_visible(False)
-    ax.spines['bottom'].set_visible(False)
-    ax.spines['left'].set_visible(False)
+    # Only the leftmost panel needs a y-axis label — suppress on panels 2 and 3
+    axes[1].set_ylabel("")
+    axes[2].set_ylabel("")
 
+    fig.suptitle(f"Feature Relevance Comparison — target: {target}",
+               fontsize=20, y=1.01)
     fig.tight_layout()
-    save_and_show_link(fig, f'plot_corr_with_{target}_{get_current_timestamp()}.png', dpi=600)
+    save_and_show_link(fig, f'plot_relevance_comparison_{target}_{get_current_timestamp()}.png', dpi=600)
 
     logger.debug("... FINISH")
     return fig
