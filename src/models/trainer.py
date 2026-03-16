@@ -153,50 +153,111 @@ def champion_callback(study: optuna.Study, frozen_trial: optuna.trial.FrozenTria
 # ===========================================================================
 # Cross-validation helper
 # ===========================================================================
-
-def _cross_val_rmse(
-    model,
-    X_train: np.ndarray,
-    y_train: np.ndarray,
-    n_splits: int = 5,
-) -> tuple[float, float]:
+def _cross_val_scores(
+model,
+X_train: pd.DataFrame | np.ndarray,
+y_train: np.ndarray,
+n_splits: int = 5,
+log_target: bool = False,
+features: list[str] | None = None,
+) -> dict:
     """
-    Run KFold cross-validation and return (mean_rmse, std_rmse).
+    Run KFold cross-validation and return per-fold RMSE and MAE scores.
+    Per-fold arrays are returned alongside mean/std so callers can compute
+    any aggregation (median, IQR, box plot) without re-running CV.
 
     Parameters
     ----------
-    model : fitted-ready sklearn-compatible estimator
-    X_train : array-like of shape (n_samples, n_features)
-        Accepts both DataFrame and ndarray.
+    model : sklearn-compatible estimator with fit/predict
+    X_train : DataFrame or ndarray of shape (n_samples, n_features)
     y_train : array-like of shape (n_samples,)
     n_splits : int
-        Number of KFold splits. Default 5.
+      Number of KFold splits. Default 5.
+    log_target : bool
+      If True, exp() is applied to predictions and actuals before
+      computing MAE so it is always in dollars. RMSE is always returned
+      in the training scale (log or raw). Default False.
+    features : list[str] or None
+      If provided, X_train is sliced to these columns before CV.
+      Requires X_train to be a DataFrame. Default None (use all columns).
 
     Returns
     -------
-    mean_rmse, std_rmse : floats
+    dict with keys:
+      rmse_folds  — list of per-fold RMSE values (training scale)
+      mae_folds   — list of per-fold MAE values (dollars)
+      rmse_mean   — float
+      rmse_std    — float
+      mae_mean    — float
+      mae_std     — float
+
+    Raises
+    ------
+    ValueError : if model produces NaN predictions in any fold
+    KeyError   : if any feature in `features` is missing from X_train
     """
+    logger.debug("START ...")
+    if features is not None:
+      if not hasattr(X_train, '__getitem__'):
+          raise TypeError("[_cross_val_scores] features slice requires a DataFrame X_train")
+      missing = [f for f in features if f not in X_train.columns]
+      if missing:
+          raise KeyError(f"[_cross_val_scores] Features not found in X_train: {missing}")
+      X_train = X_train[features]
+
+    y_train = np.asarray(y_train)
+
+    logger.info(
+        f"[CV] Starting | n_splits={n_splits} | log_target={log_target} | "
+        f"features={features} | X_shape={np.shape(X_train)}"
+    )
+
     kf = KFold(n_splits=n_splits, shuffle=True, random_state=RANDOM_STATE)
-    rmse_scores = []
+    rmse_folds, mae_folds = [], []
 
-    for train_idx, val_idx in kf.split(X_train):
-        # Support both ndarray and DataFrame inputs transparently
-        if hasattr(X_train, 'iloc'):
-            X_tr, X_vl = X_train.iloc[train_idx], X_train.iloc[val_idx]
-            y_tr, y_vl = y_train.iloc[train_idx], y_train.iloc[val_idx]
-        else:
-            X_tr, X_vl = X_train[train_idx], X_train[val_idx]
-            y_tr, y_vl = y_train[train_idx], y_train[val_idx]
+    for fold, (train_idx, val_idx) in enumerate(kf.split(X_train), start=1):
+      if hasattr(X_train, 'iloc'):
+          X_tr, X_vl = X_train.iloc[train_idx], X_train.iloc[val_idx]
+      else:
+          X_tr, X_vl = X_train[train_idx], X_train[val_idx]
 
-        model.fit(X_tr, y_tr)
-        preds = model.predict(X_vl)
+      y_tr, y_vl = y_train[train_idx], y_train[val_idx]
 
-        if np.isnan(preds).any():
-            raise ValueError("Model produced NaN predictions during CV")
+      model.fit(X_tr, y_tr)
+      preds = model.predict(X_vl)
 
-        rmse_scores.append(np.sqrt(mean_squared_error(y_vl, preds)))
+      if np.isnan(preds).any():
+          raise ValueError(f"[_cross_val_scores] NaN predictions in fold {fold}")
 
-    return float(np.mean(rmse_scores)), float(np.std(rmse_scores))
+      # RMSE always in training scale
+      rmse_folds.append(np.sqrt(mean_squared_error(y_vl, preds)))
+
+      # MAE always in dollars — back-transform if log scale
+      preds_dollars   = np.exp(preds)  if log_target else preds
+      actuals_dollars = np.exp(y_vl)   if log_target else y_vl
+      mae_folds.append(mean_absolute_error(actuals_dollars, preds_dollars))
+
+      logger.debug(
+          f"[CV] Fold {fold}/{n_splits} | "
+          f"RMSE={rmse_folds[-1]:.4f} | MAE=${mae_folds[-1]:,.0f}"
+      )
+
+    result = {
+        "rmse_folds": rmse_folds,
+        "mae_folds": mae_folds,
+        "rmse_mean": float(np.mean(rmse_folds)),
+        "rmse_std": float(np.std(rmse_folds)),
+        "mae_mean": float(np.mean(mae_folds)),
+        "mae_std": float(np.std(mae_folds)),
+    }
+
+    logger.info(
+      f"[CV] Complete | "
+      f"RMSE={result['rmse_mean']:.4f} ± {result['rmse_std']:.4f} | "
+      f"MAE=${result['mae_mean']:,.0f} ± ${result['mae_std']:,.0f}"
+    )
+    logger.debug("... FINISH")
+    return result
 
 # ===========================================================================
 # Baseline model
@@ -260,7 +321,7 @@ def run_baseline(
       preds_dollars = np.exp(preds) if log_target else preds
       actuals_dollars = np.exp(y_vl) if log_target else y_vl
 
-      fold_mae.append(mean_absolute_error(actuals_dollars, preds_dollars))
+      fold_mae.append(mean_absolute_error(actuals_dollars, preds_dollars))  # MAE in dollars
       fold_rmse.append(np.sqrt(mean_squared_error(y_vl, preds)))  # RMSE in training scale
 
       logger.debug(
@@ -325,6 +386,7 @@ def run_hyperparam_tuning(
     artefact_path: str,
     num_trials: int,
     n_cv_splits: int = 5,
+    log_target: bool = False,
 ) -> tuple[Any, Any]:
     """
     Generic Optuna + MLflow hyperparameter tuning loop.
@@ -342,7 +404,7 @@ def run_hyperparam_tuning(
     model_builder_fn : Callable[[dict], estimator]
         Builds an unfitted model from a params dict.
     X_train, y_train : training features and labels.
-        Accepted as DataFrame or ndarray (both handled in _cross_val_rmse).
+        Accepted as DataFrame or ndarray.
     X_val, y_val : held-out validation set for final model evaluation.
     pproc_pipeline : sklearn ColumnTransformer
         Preprocessing pipeline; combined with the model in create_final_pipeline.
@@ -376,21 +438,23 @@ def run_hyperparam_tuning(
         model      = model_builder_fn(params)
         final_pipe = create_final_pipeline(pproc_pipeline, model)
 
-        mean_rmse, std_rmse = _cross_val_rmse(final_pipe, X_train, y_train, n_cv_splits)
+        cv = _cross_val_scores(final_pipe, X_train, y_train, n_cv_splits, log_target=log_target)
 
-        # Log each trial as a nested MLflow run so they're queryable in the UI
         with mlflow.start_run(nested=True, run_name=f"trial_{trial.number}"):
             mlflow.log_param("trial_number", trial.number)
             mlflow.log_params(params)
-            mlflow.log_metric("cv_rmse_mean", mean_rmse)
-            mlflow.log_metric("cv_rmse_std",  std_rmse)
-            mlflow.log_metric("cv_mse_mean",  mean_rmse ** 2)
+            mlflow.log_metric("cv_rmse_mean", cv["rmse_mean"])
+            mlflow.log_metric("cv_rmse_std", cv["rmse_std"])
+            mlflow.log_metric("cv_mse_mean", cv["rmse_mean"] ** 2)
+            mlflow.log_metric("cv_mae_mean", cv["mae_mean"])  # <-- new
+            mlflow.log_metric("cv_mae_std", cv["mae_std"])  # <-- new
 
         logger.debug(
             f"[{model_name}] Trial {trial.number}: "
-            f"RMSE={mean_rmse:.4f} ± {std_rmse:.4f}"
+            f"RMSE={cv['rmse_mean']:.4f} ± {cv['rmse_std']:.4f} | "
+            f"MAE=${cv['mae_mean']:,.0f} ± ${cv['mae_std']:,.0f}"
         )
-        return mean_rmse  # Optuna minimises this
+        return cv["rmse_mean"]  # Optuna minimises RMSE
 
     # ------------------------------------------------------------------
     # Parent MLflow run — wraps the entire study
@@ -486,7 +550,7 @@ def run_hyperparam_tuning(
 # ===========================================================================
 
 def tune_lasso(X_train, y_train, X_val, y_val, pproc_pipeline,
-               experiment_id, run_name, artefact_path, num_trials) -> tuple:
+               experiment_id, run_name, artefact_path, num_trials, log_target: bool = False) -> tuple:
     """Run Optuna + MLflow tuning for Lasso regression. Returns (study, final_pipe)."""
     return run_hyperparam_tuning(
         model_name="Lasso",
@@ -499,11 +563,12 @@ def tune_lasso(X_train, y_train, X_val, y_val, pproc_pipeline,
         run_name=run_name,
         artefact_path=artefact_path,
         num_trials=num_trials,
+        log_target=log_target,
     )
 
 
 def tune_xgb(X_train, y_train, X_val, y_val, pproc_pipeline,
-             experiment_id, run_name, artefact_path, num_trials) -> tuple:
+             experiment_id, run_name, artefact_path, num_trials, log_target: bool = False) -> tuple:
     """Run Optuna + MLflow tuning for XGBoost regressor. Returns (study, final_pipe)."""
     return run_hyperparam_tuning(
         model_name="XGBoost",
@@ -516,11 +581,12 @@ def tune_xgb(X_train, y_train, X_val, y_val, pproc_pipeline,
         run_name=run_name,
         artefact_path=artefact_path,
         num_trials=num_trials,
+        log_target=log_target,
     )
 
 
 def tune_rfr(X_train, y_train, X_val, y_val, pproc_pipeline,
-             experiment_id, run_name, artefact_path, num_trials) -> tuple:
+             experiment_id, run_name, artefact_path, num_trials, log_target: bool = False) -> tuple:
     """Run Optuna + MLflow tuning for Random Forest regressor. Returns (study, final_pipe)."""
     return run_hyperparam_tuning(
         model_name="RandomForestRegressor",
@@ -533,6 +599,7 @@ def tune_rfr(X_train, y_train, X_val, y_val, pproc_pipeline,
         run_name=run_name,
         artefact_path=artefact_path,
         num_trials=num_trials,
+        log_target=log_target,
     )
 
 
