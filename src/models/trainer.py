@@ -315,6 +315,7 @@ def run_baseline(
 
       # Baseline prediction: mean of the fold's training split
       fold_mean = np.mean(y_tr)
+      # Using full_like to create a new array with the same shape as y_val, but filled entirely with a constant value.
       preds     = np.full_like(y_vl, fill_value=fold_mean, dtype=float)
 
       # Back-transform to dollars before scoring if target is log-scale
