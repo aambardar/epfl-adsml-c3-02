@@ -26,7 +26,8 @@ from rich.table import Table
 from rich.panel import Panel
 from rich import box
 from sklearn.ensemble import RandomForestRegressor
-from sklearn.linear_model import Lasso
+from sklearn.feature_selection import SelectKBest, mutual_info_regression
+from sklearn.linear_model import Lasso, LinearRegression
 from sklearn.metrics import mean_squared_error, r2_score, mean_absolute_error
 from sklearn.model_selection import KFold
 import xgboost
@@ -301,6 +302,7 @@ def run_baseline(
       val_mae                   — MAE in dollars on held-out val set
       val_rmse                  — RMSE on held-out val set (training scale)
     """
+    logger.debug("START ...")
     logger.info(f"[Baseline] Starting | log_target={log_target} | cv_splits={n_splits}")
     console.rule("[bold blue]Baseline — Mean Predictor[/bold blue]")
 
@@ -360,6 +362,7 @@ def run_baseline(
     )
     console.print(Panel(summary, title="Baseline Results", expand=False, border_style="yellow"))
 
+    logger.debug("... FINISH")
     return {
       "cv_mae_mean":  cv_mae_mean,
       "cv_mae_std":   cv_mae_std,
@@ -367,6 +370,126 @@ def run_baseline(
       "cv_rmse_std":  cv_rmse_std,
       "val_mae":      val_mae,
       "val_rmse":     val_rmse,
+    }
+
+# ===========================================================================
+# SelectKBest feature-selection model
+# ===========================================================================
+def run_simple_model(
+X_train: pd.DataFrame,
+y_train: np.ndarray,
+X_val: pd.DataFrame,
+y_val: np.ndarray,
+k: int = 2,
+log_target: bool = False,
+n_splits: int = 5,
+) -> dict:
+    """
+    Evaluate a LinearRegression model trained on the top-k MI-scored features.
+
+    SelectKBest (mutual_info_regression scorer) ranks each feature by its
+    mutual information with the target — capturing both linear and non-linear
+    associations without assuming any functional form. This makes it more
+    suitable than f_regression for this dataset, which has non-linearities
+    (e.g. OverallQual) and mixed continuous/ordinal feature types.
+
+    The selector is fit on X_train only; X_val is transformed using the same
+    fitted selector to prevent data leakage. CV is then run on X_train_sel
+    so each fold sees only the k selected columns.
+
+    Parameters
+    ----------
+    X_train : DataFrame of shape (n_train, n_features)
+      Training feature matrix.
+    y_train : array-like of shape (n_train,)
+      Training target values (raw SalePrice or log-transformed).
+    X_val : DataFrame of shape (n_val, n_features)
+      Held-out validation feature matrix (same columns as X_train).
+    y_val : array-like of shape (n_val,)
+      Held-out validation target values (same scale as y_train).
+    k : int
+      Number of top features to retain. Default 2.
+    log_target : bool
+      If True, exp() is applied before computing MAE so it is always
+      reported in dollars. RMSE remains in training scale. Default False.
+    n_splits : int
+      Number of KFold splits for cross-validation. Default 5.
+
+    Returns
+    -------
+    dict with keys:
+    selected_features             — list[str] of the k retained column names
+    cv_mae_mean, cv_mae_std       — cross-validated MAE in dollars
+    cv_rmse_mean, cv_rmse_std     — cross-validated RMSE (training scale)
+    val_mae                       — MAE in dollars on held-out val set
+    val_rmse                      — RMSE on held-out val set (training scale)
+    """
+    logger.debug("START ...")
+    logger.info(
+      f"[SelectKBest] Starting | k={k} | log_target={log_target} | cv_splits={n_splits}"
+    )
+    console.rule("[bold blue]SelectKBest — Mutual Information Feature Selection + LinearRegression[/bold blue]")
+
+    y_train = np.asarray(y_train)
+    y_val   = np.asarray(y_val)
+
+    # Feature selection (fit on train only to avoid leakage)
+    selector = SelectKBest(
+        score_func=lambda X, y: mutual_info_regression(X, y, random_state=RANDOM_STATE),
+        k=k,
+    )
+
+    X_train_sel = selector.fit_transform(X_train, y_train)
+    X_val_sel   = selector.transform(X_val)
+
+    # Recover column names for interpretability
+    selected_features = list(X_train.columns[selector.get_support()])
+    logger.info(f"[SelectKBest] Selected features: {selected_features}")
+
+    # Choosing simple LR
+    model  = LinearRegression()
+    cv_res = _cross_val_scores(
+      model, X_train_sel, y_train,
+      n_splits=n_splits, log_target=log_target,
+    )
+
+    # Held-out validation evaluation
+    model.fit(X_train_sel, y_train)
+    val_preds = model.predict(X_val_sel)
+
+    val_preds_dollars   = np.exp(val_preds) if log_target else val_preds
+    val_actuals_dollars = np.exp(y_val)     if log_target else y_val
+
+    val_mae  = mean_absolute_error(val_actuals_dollars, val_preds_dollars)
+    val_rmse = np.sqrt(mean_squared_error(y_val, val_preds))
+
+    logger.info(
+      f"[SelectKBest] CV MAE=${cv_res['mae_mean']:,.0f} ± ${cv_res['mae_std']:,.0f} | "
+      f"CV RMSE={cv_res['rmse_mean']:.4f} ± {cv_res['rmse_std']:.4f} | "
+      f"Val MAE=${val_mae:,.0f} | Val RMSE={val_rmse:.4f}"
+    )
+
+    # Rich summary panel
+    summary = (
+      f"Strategy      : SelectKBest (mutual_info_regression) → LinearRegression\n"
+      f"Features kept : {k} / {X_train.shape[1]}\n"
+      f"Log target    : {log_target}\n\n"
+      f"CV  MAE       : [bold yellow]${cv_res['mae_mean']:>12,.0f} ± ${cv_res['mae_std']:,.0f}[/bold yellow]\n"
+      f"CV  RMSE      : {cv_res['rmse_mean']:.4f} ± {cv_res['rmse_std']:.4f}\n\n"
+      f"Val MAE       : [bold yellow]${val_mae:>12,.0f}[/bold yellow]\n"
+      f"Val RMSE      : {val_rmse:.4f}"
+    )
+    console.print(Panel(summary, title="SelectKBest Results", expand=False, border_style="cyan"))
+
+    logger.debug("... FINISH")
+    return {
+      "selected_features": selected_features,
+      "cv_mae_mean":       cv_res["mae_mean"],
+      "cv_mae_std":        cv_res["mae_std"],
+      "cv_rmse_mean":      cv_res["rmse_mean"],
+      "cv_rmse_std":       cv_res["rmse_std"],
+      "val_mae":           val_mae,
+      "val_rmse":          val_rmse,
     }
 
 # ===========================================================================
@@ -426,6 +549,7 @@ def run_hyperparam_tuning(
         (study, final_pipe) — study for Optuna inspection; final_pipe is the
         fitted preprocessor+model pipeline ready for predict() or feature importance.
     """
+    logger.debug("START ...")
     logger.info(f"[{model_name}] Tuning started | trials={num_trials} | cv_splits={n_cv_splits}")
     console.rule(f"[bold blue]{model_name} — Tuning Started[/bold blue]")
     console.print(f"  {num_trials} Optuna trials · {n_cv_splits}-fold CV · objective: RMSE\n")
@@ -542,6 +666,7 @@ def run_hyperparam_tuning(
         )
         console.print(Panel(summary, expand=False, border_style="green"))
 
+    logger.debug("... FINISH")
     return study, final_pipe
 
 
@@ -638,7 +763,9 @@ def set_mlflow_uri(uri_value: str) -> None:
         e.g. 'sqlite:///mlruns.db' for a local SQLite backend,
         or 'http://localhost:5000' for a remote MLflow server.
     """
+    logger.debug("START ...")
     mlflow.set_tracking_uri(uri_value)
+    logger.debug("... FINISH")
 
 
 def set_mlflow_experiment(experiment_name: str) -> None:
@@ -651,7 +778,9 @@ def set_mlflow_experiment(experiment_name: str) -> None:
     ----------
     experiment_name : str
     """
+    logger.debug("START ...")
     mlflow.set_experiment(experiment_name)
+    logger.debug("... FINISH")
 
 
 # ===========================================================================
@@ -675,12 +804,14 @@ def load_model(model_path: str):
     ------
     FileNotFoundError : if the path does not exist.
     """
+    logger.debug("START ...")
     if not os.path.exists(model_path):
         logger.error(f"Model file not found: {model_path}")
         raise FileNotFoundError(f"Model file not found at {model_path}")
     try:
         model = joblib.load(model_path)
         logger.info(f"Model loaded from {model_path}")
+        logger.debug("... FINISH")
         return model
     except Exception as exc:
         logger.error(f"Failed to load model from {model_path}: {exc}")
@@ -697,9 +828,11 @@ def save_model(model, model_path: str) -> None:
     model_path : str
         Destination file path — directories are created if absent.
     """
+    logger.debug("START ...")
     os.makedirs(os.path.dirname(model_path), exist_ok=True)
     joblib.dump(model, model_path)
     logger.info(f"Model saved to {model_path}")
+    logger.debug("... FINISH")
 
 
 # ===========================================================================
@@ -728,6 +861,7 @@ def get_runs_df(experiment_id: str) -> pd.DataFrame:
     pd.DataFrame with columns: model, cv_rmse, val_rmse, val_r2,
     train_rmse, train_r2, run_id. Empty DataFrame if no runs found.
     """
+    logger.debug("START ...")
     runs_df = mlflow.search_runs(
         experiment_ids=[experiment_id],
         filter_string="tags.mlflow.parentRunId = ''",  # parent runs only
@@ -735,6 +869,7 @@ def get_runs_df(experiment_id: str) -> pd.DataFrame:
 
     if runs_df.empty:
         logger.warning(f"No runs found for experiment_id={experiment_id}")
+        logger.debug("... FINISH")
         return runs_df
 
     # Map verbose MLflow column names to short readable names
@@ -754,6 +889,7 @@ def get_runs_df(experiment_id: str) -> pd.DataFrame:
         result = result.sort_values('val_rmse').reset_index(drop=True)
 
     logger.info(f"Fetched {len(result)} parent runs from experiment_id={experiment_id}")
+    logger.debug("... FINISH")
     return result
 
 
@@ -771,6 +907,7 @@ def print_study_summary(studies: dict) -> None:
         Mapping of model name → completed study.
         e.g. {"XGBoost": study_xgb, "Lasso": study_lasso}
     """
+    logger.debug("START ...")
     for model_name, study in studies.items():
 
         # Scalar facts → logger (file + console via RichHandler)
@@ -808,6 +945,7 @@ def print_study_summary(studies: dict) -> None:
             table.add_row(param, str(value))
 
         console.print(table)
+    logger.debug("... FINISH")
 
 
 def print_trials_summary(study: optuna.Study, model_name: str, top_n: int = 10) -> None:
@@ -826,6 +964,7 @@ def print_trials_summary(study: optuna.Study, model_name: str, top_n: int = 10) 
     top_n : int
         Number of top-performing trials to display. Default 10.
     """
+    logger.debug("START ...")
     trials_df = study.trials_dataframe(attrs=('number', 'value', 'state'))
     completed = (
         trials_df[trials_df['state'] == 'COMPLETE']
@@ -860,6 +999,7 @@ def print_trials_summary(study: optuna.Study, model_name: str, top_n: int = 10) 
         table.add_row(str(rank), str(trial_num), f"{rmse:.4f}")
 
     console.print(table)
+    logger.debug("... FINISH")
 
 
 def print_runs_comparison(experiment_id: str) -> None:
@@ -877,6 +1017,7 @@ def print_runs_comparison(experiment_id: str) -> None:
     experiment_id : str
         MLflow experiment ID — obtain via get_or_create_experiment().
     """
+    logger.debug("START ...")
     df = get_runs_df(experiment_id)
 
     if df.empty:
@@ -940,3 +1081,4 @@ def print_runs_comparison(experiment_id: str) -> None:
         )
 
     console.print(table)
+    logger.debug("... FINISH")
