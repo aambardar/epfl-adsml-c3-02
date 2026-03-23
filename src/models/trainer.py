@@ -628,27 +628,32 @@ def run_hyperparam_tuning(
         train_rmse   = np.sqrt(mean_squared_error(y_train, y_train_pred))
         train_r2     = r2_score(y_train, y_train_pred)
 
-        # Validation metrics — primary measure of generalisation
+        # Validation metrics — the primary measure of generalisation
         y_val_pred = final_pipe.predict(X_val)
-        val_rmse   = np.sqrt(mean_squared_error(y_val, y_val_pred))
-        val_r2     = r2_score(y_val, y_val_pred)
+        val_preds_dollars = np.exp(y_val_pred) if log_target else y_val_pred
+        val_actuals_dollars = np.exp(y_val) if log_target else y_val
+
+        val_rmse = np.sqrt(mean_squared_error(y_val, y_val_pred))  # training scale
+        val_r2 = r2_score(y_val, y_val_pred)
+        val_mae = mean_absolute_error(val_actuals_dollars, val_preds_dollars)  # dollars
 
         mlflow.log_metric("train_rmse", train_rmse)
         mlflow.log_metric("train_r2",   train_r2)
         mlflow.log_metric("val_rmse",   val_rmse)
         mlflow.log_metric("val_r2",     val_r2)
+        mlflow.log_metric("val_mae",    val_mae)
 
         logger.info(
             f"[{model_name}] Final model | "
             f"train_rmse={train_rmse:.4f} | train_r2={train_r2:.4f} | "
-            f"val_rmse={val_rmse:.4f} | val_r2={val_r2:.4f}"
+            f"val_rmse={val_rmse:.4f} | val_r2={val_r2:.4f} | val_mae=${val_mae:,.0f}"
         )
 
         # Residuals plot persisted as an MLflow artefact
         residuals_fig = plot_residuals(y_val_pred, y_val)
         mlflow.log_figure(residuals_fig, "residuals_val.png")
 
-        # Full pipeline (preprocessor + model) logged as an sklearn artefact
+        # Full pipeline (preprocessor + model) logged as a sklearn artefact
         mlflow.sklearn.log_model(
             sk_model=final_pipe,
             artifact_path=artefact_path,
@@ -657,12 +662,13 @@ def run_hyperparam_tuning(
             ),
         )
 
-        # Rich summary panel shown in notebook on completion
+        # Rich summary panel shown in the notebook on completion
         console.rule(f"[bold green]{model_name} — Tuning Complete[/bold green]")
         summary = (
             f"Best CV RMSE : [bold green]{best_rmse:.4f}[/bold green]\n"
             f"Val RMSE     : [bold]{val_rmse:.4f}[/bold]\n"
-            f"Val R²       : [bold]{val_r2:.4f}[/bold]"
+            f"Val R²       : [bold]{val_r2:.4f}[/bold]\n"
+            f"Val MAE      : [bold yellow]${val_mae:>12,.0f}[/bold yellow]"
         )
         console.print(Panel(summary, expand=False, border_style="green"))
 
