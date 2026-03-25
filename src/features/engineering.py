@@ -61,18 +61,18 @@ class YearTransformer(BaseEstimator, TransformerMixin):
         return np.array([f'{col}_years_old' for col in self.original_columns_])
 
 def print_feature_expansion(pproc_pipe):
-  """
-  Prints a formatted mapping of input columns to output features for each
-  transformer branch in the fitted ColumnTransformer.
+    """
+    Prints a formatted mapping of input columns to output features for each
+    transformer branch in the fitted ColumnTransformer.
 
-  Parameters
-  ----------
-  pproc_pipe : fitted sklearn ColumnTransformer
-  """
-  logger.debug("START ...")
-  total_in, total_out = 0, 0
+    Parameters
+    ----------
+    pproc_pipe : fitted sklearn ColumnTransformer
+    """
+    logger.debug("START ...")
+    total_in, total_out = 0, 0
 
-  for branch_name, transformer, columns in pproc_pipe.transformers_:
+    for branch_name, transformer, columns in pproc_pipe.transformers_:
       if branch_name == 'remainder':
           continue
 
@@ -112,12 +112,29 @@ def print_feature_expansion(pproc_pipe):
           total_in += 1
           total_out += n_out
 
-  print(f"\n  {'='*80}")
-  print(f"  TOTAL: {total_in} input columns  →  {total_out} output columns")
-  logger.debug("... FINISH")
+    print(f"\n  {'='*80}")
+    print(f"  TOTAL: {total_in} input columns  →  {total_out} output columns")
+    logger.debug("... FINISH")
 
 
 def get_cols_as_tuple(feat_categories):
+    """
+    Unpack a feature category dict into a flat tuple of (column list, count) pairs.
+
+    Returns one (list, int) pair per category in a fixed order:
+    numerical_continuous, numerical_discrete, categorical_nominal,
+    categorical_ordinal, object, temporal, binary, low_cardinality.
+
+    Parameters
+    ----------
+    feat_categories : dict
+        Output of classify_columns.
+
+    Returns
+    -------
+    tuple
+        Flat tuple of alternating column lists and counts, 16 elements total.
+    """
     logger.debug("START ...")
     cols_num_continuous = feat_categories.get("numerical_continuous")
     n_num_continuous = len(cols_num_continuous)
@@ -161,45 +178,41 @@ def _is_low_cardinality(col, df, threshold_type, n_cat_threshold):
 def classify_columns(df, n_cat_threshold, threshold_type='ABS', cols_to_ignore=None, temporal_cols_name_pattern=None,
                      ordinal_cols=None):
     """
-      Classify each column of a DataFrame into one of eight feature types based
-      on dtype, cardinality, and caller-supplied metadata.
+    Classify each column of a DataFrame into one of eight feature types.
 
-      Classification priority (applied in order):
-          1. Temporal — datetime/timedelta dtype, or name matches a temporal pattern
-          2. Ordinal — column name explicitly listed in ordinal_cols
-          3. Binary — boolean dtype, or exactly 2 unique values
-          4. Numerical — numeric dtype; further split into discrete (integer + low
-                         cardinality) vs continuous
-          5. Categorical nominal — pandas Categorical dtype
-          6. String/object — object dtype; split into nominal (low cardinality) vs object
-          7. Fallback — anything unmatched is cast to object with a warning
+    Classification runs in priority order: temporal, ordinal, binary,
+    numerical (discrete vs continuous), categorical nominal, string/object,
+    then a fallback to object for anything unmatched.
 
-      Another derived group, low_cardinality, is a subset of categorical_nominal
-      columns that fall below the cardinality threshold.
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Input DataFrame to classify.
+    n_cat_threshold : int or float
+        Cardinality threshold. Interpreted as absolute unique-value count
+        when threshold_type is 'ABS', or as a fraction of non-null rows
+        when threshold_type is 'PCT'.
+    threshold_type : str
+        How to apply n_cat_threshold. 'ABS' for absolute, 'PCT' for percentage.
+        Defaults to 'ABS'.
+    cols_to_ignore : list of str, optional
+        Columns to skip entirely, e.g. the target variable.
+    temporal_cols_name_pattern : list of str, optional
+        Substrings matched against column names to flag temporal columns by name.
+    ordinal_cols : list of str, optional
+        Column names to explicitly classify as categorical_ordinal.
 
-      Parameters:
-          df (pd.DataFrame): Input DataFrame whose columns are to be classified.
-          n_cat_threshold (int | float): Cardinality threshold. Interpreted as an
-              absolute unique-value count when threshold_type='ABS', or as a
-              fraction of non-null rows when threshold_type='PCT'.
-          threshold_type (str): How to apply n_cat_threshold. 'ABS' for absolute
-              count, 'PCT' for percentage. Defaults to 'ABS'.
-          cols_to_ignore (list[str] | None): Columns to skip entirely (e.g. the
-              target variable). Defaults to None (no columns skipped).
-          temporal_cols_name_pattern (list[str] | None): Substrings to match
-              against column names to identify temporal columns by name (e.g.
-              ['Year', 'Mo']). Defaults to None.
-          ordinal_cols (list[str] | None): Column names to explicitly classify as
-              categorical_ordinal regardless of dtype. Defaults to None.
+    Returns
+    -------
+    dict
+        Keys are feature type labels, values are lists of column names.
+        Types: 'numerical_continuous', 'numerical_discrete', 'categorical_nominal',
+        'categorical_ordinal', 'object', 'temporal', 'binary', 'low_cardinality'.
 
-      Returns:
-          dict[str, list[str]]: Keys are feature type labels, values are lists of
-              column names assigned to that type:
-              'numerical_continuous', 'numerical_discrete', 'categorical_nominal',
-              'categorical_ordinal', 'object', 'temporal', 'binary', 'low_cardinality'
-
-      Raises:
-          ValueError: If threshold_type is not 'ABS' or 'PCT'.
+    Raises
+    ------
+    ValueError
+        If threshold_type is not 'ABS' or 'PCT'.
     """
     logger.debug("START ...")
 
@@ -312,7 +325,19 @@ def classify_columns(df, n_cat_threshold, threshold_type='ABS', cols_to_ignore=N
 
 
 def get_cardinality_df(df):
-    # Create a cardinality DF that captures pct of not null and null values, along with pct of unique values
+    """
+    Build a cardinality summary DataFrame for all columns.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+
+    Returns
+    -------
+    pd.DataFrame
+        One row per column with notnull_pct, null_pct, and unique_pct fields,
+        sorted ascending by null_pct.
+    """
     logger.debug("START ...")
     null_counts = df.isnull().sum()
     df_cardinality = pd.DataFrame({
@@ -422,6 +447,20 @@ def create_pproc_pipeline(cols_num, cols_cat, cols_ord_cat, cols_temporal):
 
 
 def create_final_pipeline(pproc_pipe, model):
+    """
+    Wrap a preprocessor and a model into a single sklearn Pipeline.
+
+    Parameters
+    ----------
+    pproc_pipe : sklearn.compose.ColumnTransformer
+        Fitted or unfitted preprocessor.
+    model : sklearn estimator
+        The regression model to place after preprocessing.
+
+    Returns
+    -------
+    sklearn.pipeline.Pipeline
+    """
     logger.debug("START ...")
     # Create a full pipeline with preprocessing and model
     final_pipe = Pipeline(steps=[
@@ -432,6 +471,24 @@ def create_final_pipeline(pproc_pipe, model):
     return final_pipe
 
 def get_final_features(final_pipeline, X_train):
+    """
+    Extract and print input/output feature names for each transformer in the pipeline.
+
+    Iterates over the preprocessor step and calls get_feature_names_out where
+    available, printing a summary of input vs output counts per transformer.
+
+    Parameters
+    ----------
+    final_pipeline : sklearn.pipeline.Pipeline
+        Fitted pipeline containing a 'preprocessor' step.
+    X_train : pd.DataFrame
+        Training data used to fit the pipeline.
+
+    Returns
+    -------
+    tuple of (list, list)
+        feature_names and column_names extracted from the pipeline.
+    """
     logger.debug("START ...")
     feature_names = []
     column_names = []

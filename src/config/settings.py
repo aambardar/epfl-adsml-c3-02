@@ -1,7 +1,5 @@
-import os
 from pathlib import Path
 
-# TODO: update project name
 # Project name
 PROJECT_NAME = 'ADSML-C3-V2-HOUSE-PRICES'
 # Anchor to the project root (3 levels up from src/config/settings.py)
@@ -24,7 +22,6 @@ LOG_ROOT_LEVEL = 'DEBUG'
 LOG_FILE_LEVEL = 'DEBUG'
 LOG_CONSOLE_LEVEL = 'INFO'
 
-# TODO: update data file configs
 # Data files
 TRAIN_FILENAME = 'house-prices.csv'
 TEST_FILENAME = 'house-prices-test.csv'

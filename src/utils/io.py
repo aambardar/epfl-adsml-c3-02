@@ -1,5 +1,5 @@
 import matplotlib.pyplot as plt
-import os, subprocess
+import os
 from IPython.display import display, FileLink
 from datetime import datetime
 import joblib
@@ -10,6 +10,21 @@ from src.utils.logging import get_logger
 logger = get_logger()
 
 def save_and_show_link(fig_to_save, filename, base_dir=PATH_OUT_VISUALS, dpi=100, show_link: bool = True):
+    """
+    Save a matplotlib figure to disk and optionally show a clickable link.
+
+    Parameters
+    ----------
+    fig_to_save : matplotlib.figure.Figure
+    filename : str
+        Output filename including extension.
+    base_dir : str or Path
+        Destination directory. Defaults to PATH_OUT_VISUALS.
+    dpi : int
+        Resolution. Defaults to 100.
+    show_link : bool
+        If True, renders a FileLink in the notebook output.
+    """
     logger.debug("START ...")
     os.makedirs(base_dir, exist_ok=True)
 
@@ -30,12 +45,36 @@ def save_and_show_link(fig_to_save, filename, base_dir=PATH_OUT_VISUALS, dpi=100
     logger.debug("... FINISH")
 
 def get_current_timestamp():
+    """
+    Return the current datetime as a compact string (YYYYmmdd_HHMMSS_mmm).
+
+    Returns
+    -------
+    str
+    """
     logger.debug("START ...")
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S_%f')[:-3]
     logger.debug("... FINISH")
     return timestamp
 
 def save_file(file_type_to_save, filename, base_dir_path, data):
+    """
+    Save data to disk in the format matching the given file type.
+
+    Supported types are 'feature', 'model', 'hyperparams', and 'metrics'.
+    For 'metrics', content is appended if the file already exists.
+
+    Parameters
+    ----------
+    file_type_to_save : str
+        One of 'feature', 'model', 'hyperparams', 'metrics'.
+    filename : str
+        Output filename.
+    base_dir_path : str or Path
+        Destination directory.
+    data : object
+        Content to save; type depends on file_type_to_save.
+    """
     logger.debug("START ...")
     os.makedirs(base_dir_path, exist_ok=True)
 

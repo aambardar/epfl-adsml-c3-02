@@ -1,4 +1,3 @@
-# importing visualisation libraries and stylesheets
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
 import os
@@ -10,6 +9,7 @@ from sklearn.feature_selection import mutual_info_regression
 from src.config.settings import MPL_STYLE_FILE, CATEGORICAL_CARDINALITY_THRESHOLD_TYPE_ABS, CATEGORICAL_CARDINALITY_THRESHOLD_TYPE_PCT
 from src.utils.io import save_file, save_and_show_link, get_current_timestamp
 from src.utils.logging import get_logger
+
 logger = get_logger()
 
 plt.style.use(MPL_STYLE_FILE)
@@ -28,6 +28,24 @@ custColour = ColourStyling()
 
 # function to render colour coded print statements
 def beautify(str_to_print: str, format_type: int = 0) -> str:
+    """
+    Wrap a string in ANSI colour codes for console/notebook output.
+
+    Parameters
+    ----------
+    str_to_print : str
+    format_type : int
+        Colour index: 0=magenta, 1=green, 2=gold, 3=red. Defaults to 0.
+
+    Returns
+    -------
+    str
+
+    Raises
+    ------
+    ValueError
+        If format_type is outside 0-3.
+    """
     color_map = {
         0: custColour.mgt,
         1: custColour.grn,
@@ -41,6 +59,15 @@ def beautify(str_to_print: str, format_type: int = 0) -> str:
     return f"{color_map[format_type]}{str_to_print}{custColour.res}"
 
 def display_plot_link(filename, base_dir='plots'):
+    """
+    Show a clickable FileLink for a saved plot in the notebook.
+
+    Parameters
+    ----------
+    filename : str
+    base_dir : str
+        Directory containing the file. Defaults to 'plots'.
+    """
     logger.debug("START ...")
     filepath = os.path.join(base_dir, filename)
     if os.path.exists(filepath):
@@ -50,6 +77,22 @@ def display_plot_link(filename, base_dir='plots'):
     logger.debug("... FINISH")
 
 def plot_cardinality(cardinality_df, n_cat_threshold, threshold_used=CATEGORICAL_CARDINALITY_THRESHOLD_TYPE_ABS, type_of_cols='all', figsize=(10, 6)):
+    """
+    Bar chart of null, non-null, and unique value percentages per column.
+
+    Parameters
+    ----------
+    cardinality_df : pd.DataFrame
+        Output of get_cardinality_df.
+    n_cat_threshold : int or float
+        Threshold value used when classifying columns.
+    threshold_used : str
+        'ABS' or 'PCT'. A horizontal threshold line is drawn only for 'PCT'.
+    type_of_cols : str
+        Label used in the plot title. Defaults to 'all'.
+    figsize : tuple
+        Figure dimensions. Defaults to (10, 6).
+    """
     logger.debug("START ...")
     stack_colours = ['#deffd4', '#ffffff']
 
@@ -87,15 +130,13 @@ def plot_cardinality(cardinality_df, n_cat_threshold, threshold_used=CATEGORICAL
 
 def plot_numerical_distribution(df, features):
     """
-    Plots histogram and boxplot pairs for each numerical feature, paginated into
-    rows of up to n_cols features per figure.
+    Histogram and boxplot pairs for each numerical feature, paginated by rows.
 
-    Args:
-        df (pd.DataFrame): DataFrame containing the feature columns.
-        features (list[str]): List of numerical feature column names to plot.
-
-    Returns:
-        None
+    Parameters
+    ----------
+    df : pd.DataFrame
+    features : list of str
+        Numerical column names to plot.
     """
     logger.debug("START ...")
     if not features:
@@ -161,15 +202,13 @@ def plot_numerical_distribution(df, features):
 
 def plot_categorical_distribution(df, features):
     """
-    Plots value count bar charts for each categorical feature, paginated into
-    rows of up to n_cols features per figure.
+    Value count bar charts for each categorical feature, paginated by rows.
 
-    Args:
-        df (pd.DataFrame): DataFrame containing the feature columns.
-        features (list[str]): List of categorical feature column names to plot.
-
-    Returns:
-        None
+    Parameters
+    ----------
+    df : pd.DataFrame
+    features : list of str
+        Categorical column names to plot.
     """
     logger.debug("START ...")
     if not features:
@@ -207,17 +246,17 @@ def plot_categorical_distribution(df, features):
 
 def plot_relationship_to_target(df, features, target, trend_type=None):
     """
-    Plots the distribution of the target variable across categories of each feature
-    using boxplots, with an optional mean or median trend line overlay.
+    Boxplots of the target across each feature's categories, with an optional trend overlay.
 
-    Args:
-        df (pd.DataFrame): DataFrame containing the feature and target columns.
-        features (list[str]): List of categorical feature column names to plot against target.
-        target (str): Name of the target column.
-        trend_type (str, optional): Trend line to overlay — 'mean' or 'median'. Default None.
-
-    Returns:
-        None
+    Parameters
+    ----------
+    df : pd.DataFrame
+    features : list of str
+        Categorical column names to plot against target.
+    target : str
+        Name of the target column.
+    trend_type : str, optional
+        Overlay line per category: 'mean' or 'median'. Defaults to None.
     """
     logger.debug("START ...")
     if not features:
@@ -277,6 +316,17 @@ def plot_relationship_to_target(df, features, target, trend_type=None):
 
 
 def plot_metrics_snapshot(model_metrics, model_type=None):
+    """
+    Line plots of MSE and R2 across training iterations.
+
+    Parameters
+    ----------
+    model_metrics : list of dict
+        Each entry needs 'iteration', 'train_mse', 'val_mse', 'test_mse',
+        'train_r2', 'val_r2', 'test_r2' keys.
+    model_type : str, optional
+        Reserved for future use; not currently used in the plot.
+    """
     logger.debug("START ...")
     if model_metrics is None or len(model_metrics) == 0:
         logger.debug("... FINISH")
@@ -309,8 +359,19 @@ def plot_metrics_snapshot(model_metrics, model_type=None):
 
 def _compute_corr_scores(df, target, method='pearson'):
     """
-    Compute Pearson or Spearman correlation of all features against target.
-    Returns a Series sorted ascending, with target column dropped.
+    Compute Pearson or Spearman correlation of all features against the target.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+    target : str
+    method : str
+        'pearson' or 'spearman'. Defaults to 'pearson'.
+
+    Returns
+    -------
+    pd.Series
+        Sorted ascending, with the target column dropped.
     """
     return (
       df.corrwith(df[target], method=method)
@@ -320,9 +381,22 @@ def _compute_corr_scores(df, target, method='pearson'):
 
 def _compute_mi_scores(df, target, random_state=43):
     """
-    Compute Mutual Information scores of all features against target.
-    Median-imputes NaNs in numeric columns before computing (MI requirement).
-    Returns a Series sorted ascending.
+    Compute Mutual Information scores of all features against the target.
+
+    Numeric columns with NaNs are median-imputed before scoring, as required
+    by mutual_info_regression.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+    target : str
+    random_state : int
+        Defaults to 43.
+
+    Returns
+    -------
+    pd.Series
+        Sorted ascending.
     """
     features = df.drop(columns=[target])
     y        = df[target].values
@@ -335,9 +409,22 @@ def _compute_mi_scores(df, target, random_state=43):
 
 def _render_corr_hbar(ax, series, title, xlabel, cmap, norm, show_zero_line=False):
     """
-    Render a horizontal bar chart on ax with colour-mapped bars.
-    Handles spines, grid, labels, and optional zero-line — everything
-    that is identical across all three correlation plots.
+    Draw a colour-mapped horizontal bar chart on the given axes.
+
+    Handles spines, grid, axis labels, and an optional zero reference line.
+    Shared across all correlation plot functions.
+
+    Parameters
+    ----------
+    ax : matplotlib.axes.Axes
+    series : pd.Series
+        Values to plot; index used as y-axis labels.
+    title : str
+    xlabel : str
+    cmap : matplotlib colormap
+    norm : matplotlib.colors.Normalize
+    show_zero_line : bool
+        If True, draws a vertical line at x=0 and sets xlim to (-1, 1).
     """
     color_mapped = [cmap(norm(v)) for v in series.values]
     ax.barh(series.index, series.values, color=color_mapped)
@@ -399,21 +486,23 @@ def plot_mutual_information_with_target(df, target, random_state=43):
 
 def plot_feature_relevance_comparison(df, target, random_state=43):
     """
-    Three-panel side-by-side comparison of Pearson, Spearman, and Mutual Information
-    scores for all features against the target variable.
+    Side-by-side Pearson, Spearman, and Mutual Information charts for all features.
 
-    All three panels share the same y-axis feature order (sorted by MI score,
-    descending top-to-bottom) so cross-panel comparison is direct. Features where
-    MI is high but Pearson/Spearman is low signal non-linear relationships.
+    All three panels share the same y-axis feature order (sorted by MI score)
+    so cross-panel comparison is straightforward.
 
-    Args:
-      df (pd.DataFrame): DataFrame containing features and the target column.
-                         NaN values are acceptable — MI imputes internally.
-      target (str): Name of the target column.
-      random_state (int): Seed for MI estimation. Default 43.
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Must include all feature columns and the target.
+    target : str
+        Name of the target column.
+    random_state : int
+        Seed for MI estimation. Defaults to 43.
 
-    Returns:
-      fig (plt.Figure): The matplotlib Figure object.
+    Returns
+    -------
+    matplotlib.figure.Figure
     """
     logger.debug("START ...")
 
@@ -454,19 +543,18 @@ def plot_feature_relevance_comparison(df, target, random_state=43):
 
 def plot_residuals(preds_y, true_y):
     """
-    Plots residuals (true − predicted) against true values as a scatter plot.
+    Scatter plot of residuals (true minus predicted) against true values.
 
-    A horizontal reference line at y=0 marks perfect prediction. Points above
-    the line indicate under-predictions; points below indicate over-predictions.
-    Seaborn styling is scoped via a context manager so it does not bleed into
-    subsequent plots.
+    Parameters
+    ----------
+    preds_y : array-like
+        Predicted values.
+    true_y : array-like
+        True target values.
 
-    Args:
-        preds_y:            Predicted values from the model.
-        true_y:             True target values (same scale as preds_y).
-
-    Returns:
-        fig: The matplotlib Figure object.
+    Returns
+    -------
+    matplotlib.figure.Figure
     """
     logger.debug("START ...")
 
@@ -497,19 +585,23 @@ def plot_residuals(preds_y, true_y):
 
 def plot_feature_importance(pipeline, top_n: int = 30, importance_type: str = "gain"):
     """
-    Plots top-N feature importances for an XGBoost pipeline, with proper feature names.
+    Horizontal bar chart of the top-N XGBoost feature importances.
 
-    Extracts feature names from the pipeline's preprocessor step via
-    get_feature_names_out(), aligns them with the regressor's feature_importances_,
-    and renders a clean horizontal bar chart of the top-N features.
+    Extracts feature names from the pipeline's preprocessor step and maps
+    them to the booster's internal feature indices.
 
-    Args:
-        pipeline:         Fitted sklearn Pipeline containing 'preprocessor' and 'regressor' steps.
-        top_n (int):      Number of top features to display. Default 30.
-        importance_type:  'gain' (default) or 'weight'. Passed to XGBoost booster.
+    Parameters
+    ----------
+    pipeline : sklearn.pipeline.Pipeline
+        Fitted pipeline with 'preprocessor' and 'regressor' steps.
+    top_n : int
+        Number of top features to show. Defaults to 30.
+    importance_type : str
+        'gain' or 'weight'. Passed to XGBoost's get_score. Defaults to 'gain'.
 
-    Returns:
-        fig: The matplotlib Figure object.
+    Returns
+    -------
+    matplotlib.figure.Figure
     """
     preprocessor = pipeline.named_steps['preprocessor']
     regressor    = pipeline.named_steps['regressor']
@@ -546,24 +638,25 @@ def plot_model_comparison(
         plot_type: str = 'bar',
 ) -> plt.Figure:
     """
-    Compare CV MAE across models using a bar chart or box plot.
+    Compare cross-validated MAE across models using a bar chart or box plot.
 
-    Args:
-        model_metrics (dict):
-            Keys are model display names (e.g. 'Baseline', 'Simple').
-            Values are metrics dicts returned by run_baseline, run_simple_model,
-            or tune_* functions. Bar mode requires 'cv_mae_mean' and 'cv_mae_std'.
-            Box mode requires 'cv_mae' (list of per-fold MAE values).
-        plot_type (str):
-            'bar' — bar chart with ± cv_mae_std error bars. Default.
-            'box' — box plot using per-fold cv_mae distributions.
+    Parameters
+    ----------
+    model_metrics : dict
+        Keys are model display names. Values are metrics dicts with 'cv_mae_mean'
+        and 'cv_mae_std' for bar mode, or 'cv_mae' (list of per-fold values) for
+        box mode.
+    plot_type : str
+        'bar' for a bar chart with error bars, 'box' for a box plot. Defaults to 'bar'.
 
-    Returns:
-        fig: The matplotlib Figure object.
+    Returns
+    -------
+    matplotlib.figure.Figure
 
-    Raises:
-        ValueError: if plot_type is not 'bar' or 'box', or if 'cv_mae' is
-                    missing from any metrics dict when plot_type='box'.
+    Raises
+    ------
+    ValueError
+        If plot_type is not 'bar' or 'box'.
     """
     logger.debug("START ...")
     logger.info(
