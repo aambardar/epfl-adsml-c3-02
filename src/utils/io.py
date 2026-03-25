@@ -9,7 +9,7 @@ from src.utils.logging import get_logger
 
 logger = get_logger()
 
-def save_and_show_link(fig_to_save, filename, base_dir=PATH_OUT_VISUALS, dpi=100):
+def save_and_show_link(fig_to_save, filename, base_dir=PATH_OUT_VISUALS, dpi=100, display: bool = True):
     logger.debug("START ...")
     os.makedirs(base_dir, exist_ok=True)
 
@@ -24,9 +24,9 @@ def save_and_show_link(fig_to_save, filename, base_dir=PATH_OUT_VISUALS, dpi=100
     fig_to_save.savefig(full_filepath, dpi=dpi, bbox_inches='tight')
     plt.close(fig_to_save)  # Close the figure to free memory
 
-    # Display a link to the saved figure
-    display(FileLink(full_filepath))
-    # display(HTML(full_filepath))
+    if display:
+        display(FileLink(full_filepath))        # Display a link to the saved figure
+
     logger.debug("... FINISH")
 
 def get_current_timestamp():

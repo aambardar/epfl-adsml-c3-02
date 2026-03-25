@@ -1,11 +1,10 @@
 # importing visualisation libraries and stylesheets
 import matplotlib.pyplot as plt
+import matplotlib.ticker as mticker
 import os
 from IPython.display import display, FileLink
 import seaborn as sns
 import pandas as pd
-import numpy as np
-import xgboost as xgb
 from sklearn.feature_selection import mutual_info_regression
 
 from src.config.settings import MPL_STYLE_FILE, CATEGORICAL_CARDINALITY_THRESHOLD_TYPE_ABS, CATEGORICAL_CARDINALITY_THRESHOLD_TYPE_PCT
@@ -453,48 +452,47 @@ def plot_feature_relevance_comparison(df, target, random_state=43):
     logger.debug("... FINISH")
     return fig
 
-def plot_residuals(preds_y, true_y, save_path=None):  # noqa: D417
+def plot_residuals(preds_y, true_y):
     """
-    Plots the residuals of the model predictions against the true values.
+    Plots residuals (true − predicted) against true values as a scatter plot.
+
+    A horizontal reference line at y=0 marks perfect prediction. Points above
+    the line indicate under-predictions; points below indicate over-predictions.
+    Seaborn styling is scoped via a context manager so it does not bleed into
+    subsequent plots.
 
     Args:
-    - model: The trained XGBoost model.
-    - dvalid (xgb.DMatrix): The validation data in XGBoost DMatrix format.
-    - valid_y (pd.Series): The true values for the validation set.
-    - save_path (str, optional): Path to save the generated plot. If not specified, plot won't be saved.
+        preds_y:            Predicted values from the model.
+        true_y:             True target values (same scale as preds_y).
 
     Returns:
-    - None (Displays the residuals plot on a Jupyter window)
+        fig: The matplotlib Figure object.
     """
+    logger.debug("START ...")
 
-    # Calculate residuals
+    # Residuals: positive = under-prediction, negative = over-prediction
     residuals = true_y - preds_y
 
-    # Set Seaborn style
-    sns.set_style("whitegrid", {"axes.facecolor": "#c2c4c2", "grid.linewidth": 1.5})
+    # Scope seaborn style to this plot only — avoids overriding the global
+    # matplotlib stylesheet for later plots in the session.
+    with sns.axes_style("whitegrid", {"axes.facecolor": "#c2c4c2", "grid.linewidth": 1.5}):
+        fig = plt.figure(figsize=(12, 8))
+        plt.scatter(true_y, residuals, color="blue", alpha=0.5)
 
-    # Create scatter plot
-    fig = plt.figure(figsize=(12, 8))
-    plt.scatter(true_y, residuals, color="blue", alpha=0.5)
-    plt.axhline(y=0, color="r", linestyle="-")
+        # Reference line at zero — perfect predictions lie on this line
+        plt.axhline(y=0, color="r", linestyle="-")
 
-    # Set labels, title and other plot properties
-    plt.title("Residuals vs True Values", fontsize=18)
-    plt.xlabel("True Values", fontsize=16)
-    plt.ylabel("Residuals", fontsize=16)
-    plt.xticks(fontsize=14)
-    plt.yticks(fontsize=14)
-    plt.grid(axis="y")
+        plt.title("Residuals vs True Values", fontsize=18)
+        plt.xlabel("True Values", fontsize=16)
+        plt.ylabel("Residuals", fontsize=16)
+        plt.xticks(fontsize=14)
+        plt.yticks(fontsize=14)
+        plt.grid(axis="y")
+        plt.tight_layout()
 
-    plt.tight_layout()
-
-    # Save the plot if save_path is specified
-    if save_path:
-        plt.savefig(save_path, format="png", dpi=600)
-
-    # Show the plot
     plt.close(fig)
 
+    logger.debug("... FINISH")
     return fig
 
 def plot_feature_importance(pipeline, top_n: int = 30, importance_type: str = "gain"):
@@ -540,4 +538,94 @@ def plot_feature_importance(pipeline, top_n: int = 30, importance_type: str = "g
     save_and_show_link(fig, f'plot_feat_importance_top{top_n}_{get_current_timestamp()}.png')
     plt.close(fig)
 
+    return fig
+
+
+def plot_model_comparison(
+        model_metrics: dict,
+        plot_type: str = 'bar',
+) -> plt.Figure:
+    """
+    Compare CV MAE across models using a bar chart or box plot.
+
+    Args:
+        model_metrics (dict):
+            Keys are model display names (e.g. 'Baseline', 'Simple').
+            Values are metrics dicts returned by run_baseline, run_simple_model,
+            or tune_* functions. Bar mode requires 'cv_mae_mean' and 'cv_mae_std'.
+            Box mode requires 'cv_mae' (list of per-fold MAE values).
+        plot_type (str):
+            'bar' — bar chart with ± cv_mae_std error bars. Default.
+            'box' — box plot using per-fold cv_mae distributions.
+
+    Returns:
+        fig: The matplotlib Figure object.
+
+    Raises:
+        ValueError: if plot_type is not 'bar' or 'box', or if 'cv_mae' is
+                    missing from any metrics dict when plot_type='box'.
+    """
+    logger.debug("START ...")
+    logger.info(
+        f"[plot_model_comparison] models={list(model_metrics.keys())} | plot_type={plot_type}"
+    )
+
+    if plot_type not in ('bar', 'box'):
+        raise ValueError(
+            f"[plot_model_comparison] plot_type must be 'bar' or 'box', got '{plot_type}'"
+        )
+
+    model_names = list(model_metrics.keys())
+    fig, ax = plt.subplots(figsize=(8, 5))
+
+    if plot_type == 'bar':
+        mae_means = [model_metrics[m]['cv_mae_mean'] for m in model_names]
+        mae_stds = [model_metrics[m]['cv_mae_std'] for m in model_names]
+
+        bars = ax.bar(
+            model_names, mae_means, yerr=mae_stds, capsize=5,
+            edgecolor='black', linewidth=0.5,
+        )
+
+        # Annotate each bar with its MAE value for quick reading
+        for bar, mean in zip(bars, mae_means):
+            ax.text(
+                bar.get_x() + bar.get_width() / 2,
+                bar.get_height() * 1.03,
+                f'${mean:,.0f}',
+                ha='center', va='bottom', fontsize=10, fontweight='bold',
+            )
+
+        ax.set_ylim(0, max(mae_means) * 1.25)
+
+    else:  # box
+        # Validate that per-fold data is present in every metrics dict
+        missing = [m for m in model_names if 'cv_mae' not in model_metrics[m]]
+        if missing:
+            raise ValueError(
+                f"[plot_model_comparison] 'cv_mae' missing from: {missing}. "
+                f"Add it to the return dict of the relevant run_* / tune_* functions."
+            )
+
+        fold_data = [model_metrics[m]['cv_mae'] for m in model_names]
+
+        bp = ax.boxplot(
+            fold_data, labels=model_names, patch_artist=True,
+            medianprops=dict(color='darkorange', linewidth=2),
+        )
+        for patch in bp['boxes']:
+            patch.set_alpha(0.7)
+
+    # Shared formatting — spines and grid governed by stylesheet
+    ax.set_title('Compare Models — CV MAE', fontsize=14)
+    ax.set_ylabel('MAE (dollars)', fontsize=12)
+    ax.yaxis.set_major_formatter(
+        mticker.FuncFormatter(lambda x, _: f'${x:,.0f}')
+    )
+
+    plt.tight_layout()
+    save_and_show_link(fig, f'plot_model_comparison_{get_current_timestamp()}.png')
+    plt.close(fig)
+
+    logger.debug("... FINISH")
     return fig

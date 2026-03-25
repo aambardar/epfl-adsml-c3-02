@@ -35,7 +35,7 @@ import xgboost
 from src.config.settings import RANDOM_STATE, PROJECT_NAME
 from src.features.engineering import create_final_pipeline
 from src.utils.logging import get_logger, console
-from src.visualisation.plots import plot_residuals
+from src.visualisation.plots import plot_residuals, save_and_show_link
 
 logger = get_logger()
 
@@ -364,6 +364,7 @@ def run_baseline(
 
     logger.debug("... FINISH")
     return {
+      "cv_mae_folds": fold_mae,
       "cv_mae_mean":  cv_mae_mean,
       "cv_mae_std":   cv_mae_std,
       "cv_rmse_mean": cv_rmse_mean,
@@ -484,6 +485,7 @@ n_splits: int = 5,
     logger.debug("... FINISH")
     return {
       "selected_features": selected_features,
+      "cv_mae_folds":      cv_res["mae_folds"],
       "cv_mae_mean":       cv_res["mae_mean"],
       "cv_mae_std":        cv_res["mae_std"],
       "cv_rmse_mean":      cv_res["rmse_mean"],
@@ -567,6 +569,7 @@ def run_hyperparam_tuning(
         trial.set_user_attr("cv_rmse_std", cv["rmse_std"])
         trial.set_user_attr("cv_mae_mean", cv["mae_mean"])
         trial.set_user_attr("cv_mae_std",  cv["mae_std"])
+        trial.set_user_attr("cv_mae_folds", cv["mae_folds"])
 
         with mlflow.start_run(nested=True, run_name=f"trial_{trial.number}"):
             mlflow.log_param("trial_number", trial.number)
@@ -655,7 +658,9 @@ def run_hyperparam_tuning(
 
         # Residuals plot persisted as an MLflow artefact
         residuals_fig = plot_residuals(y_val_pred, y_val)
-        mlflow.log_figure(residuals_fig, "residuals_val.png")
+        residuals_fig_name = f"{model_name}_{experiment_id}_residuals.png"
+        mlflow.log_figure(residuals_fig, residuals_fig_name)
+        save_and_show_link(residuals_fig, residuals_fig_name, display=False)
 
         # Full pipeline (preprocessor + model) logged as a sklearn artefact
         mlflow.sklearn.log_model(
@@ -681,6 +686,7 @@ def run_hyperparam_tuning(
             "cv_rmse_std": best_trial.user_attrs["cv_rmse_std"],
             "cv_mae_mean": best_trial.user_attrs["cv_mae_mean"],
             "cv_mae_std": best_trial.user_attrs["cv_mae_std"],
+            "cv_mae_folds": best_trial.user_attrs["cv_mae_folds"],
             "val_mae": val_mae,
             "val_rmse": val_rmse,
             "val_r2": val_r2,
