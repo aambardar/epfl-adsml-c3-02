@@ -600,14 +600,14 @@ def plot_model_comparison(
 
     else:  # box
         # Validate that per-fold data is present in every metrics dict
-        missing = [m for m in model_names if 'cv_mae' not in model_metrics[m]]
+        missing = [m for m in model_names if 'cv_mae_folds' not in model_metrics[m]]
         if missing:
             raise ValueError(
-                f"[plot_model_comparison] 'cv_mae' missing from: {missing}. "
+                f"[plot_model_comparison] 'cv_mae_folds' missing from: {missing}. "
                 f"Add it to the return dict of the relevant run_* / tune_* functions."
             )
 
-        fold_data = [model_metrics[m]['cv_mae'] for m in model_names]
+        fold_data = [model_metrics[m]['cv_mae_folds'] for m in model_names]
 
         bp = ax.boxplot(
             fold_data, labels=model_names, patch_artist=True,
@@ -617,7 +617,7 @@ def plot_model_comparison(
             patch.set_alpha(0.7)
 
     # Shared formatting — spines and grid governed by stylesheet
-    ax.set_title('Compare Models — CV MAE', fontsize=14)
+    ax.set_title('Compare Models — CV MAE Folds', fontsize=14)
     ax.set_ylabel('MAE (dollars)', fontsize=12)
     ax.yaxis.set_major_formatter(
         mticker.FuncFormatter(lambda x, _: f'${x:,.0f}')

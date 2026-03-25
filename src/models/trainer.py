@@ -660,7 +660,7 @@ def run_hyperparam_tuning(
         residuals_fig = plot_residuals(y_val_pred, y_val)
         residuals_fig_name = f"{model_name}_{experiment_id}_residuals.png"
         mlflow.log_figure(residuals_fig, residuals_fig_name)
-        save_and_show_link(residuals_fig, residuals_fig_name, display=False)
+        save_and_show_link(residuals_fig, residuals_fig_name, show_link=False)
 
         # Full pipeline (preprocessor + model) logged as a sklearn artefact
         mlflow.sklearn.log_model(
