@@ -6,8 +6,8 @@ Design principles:
     Model-specific logic lives in small `*_param_space` and `build_*` functions.
   - TPE sampler (Optuna default) replaces RandomSampler for smarter search.
   - CV mean + std both logged; objective is RMSE (same scale as SalePrice).
-  - Logging dual-channel: structured file logs via project logger + rich
-    console output for key notebook milestones (start, new best, summary).
+  - Logging dual-channel: structured file logs via project logger +
+    print statements for key notebook milestones (start, new best, summary).
   - RandomForestRegressor used (not Classifier) — this is a regression task.
   - All functions have docstrings; no commented-out print blocks.
 """
@@ -22,9 +22,6 @@ import mlflow.xgboost
 import numpy as np
 import optuna
 import pandas as pd
-from rich.table import Table
-from rich.panel import Panel
-from rich import box
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.feature_selection import SelectKBest, mutual_info_regression
 from sklearn.linear_model import Lasso, LinearRegression
@@ -34,7 +31,7 @@ import xgboost
 
 from src.config.settings import RANDOM_STATE, PROJECT_NAME
 from src.features.engineering import create_final_pipeline
-from src.utils.logging import get_logger, console
+from src.utils.logging import get_logger
 from src.visualisation.plots import plot_residuals, save_and_show_link
 
 logger = get_logger()
@@ -122,8 +119,8 @@ def build_rfr(params: dict) -> RandomForestRegressor:
 
 def champion_callback(study: optuna.Study, frozen_trial: optuna.trial.FrozenTrial) -> None:
     """
-    Fires after each trial. Logs and displays a rich message whenever a new
-    best score is found. Correctly handles the very first trial (no prior best).
+    Fires after each trial. Logs and prints a message whenever a new best
+    score is found. Correctly handles the very first trial (no prior best).
     """
     prev_best    = study.user_attrs.get("best_rmse", None)
     current_rmse = frozen_trial.value  # objective returns RMSE
@@ -146,9 +143,8 @@ def champion_callback(study: optuna.Study, frozen_trial: optuna.trial.FrozenTria
         else:
             msg = f"Trial {frozen_trial.number}: initial best RMSE {current_rmse:.4f}"
 
-        # Log to file via logger; display inline via rich console
         logger.info(msg)
-        console.print(f"[bold green]▶ New best found[/bold green] — {msg}")
+        print(f"  >> New best -- {msg}")
 
 
 # ===========================================================================
@@ -304,7 +300,7 @@ def run_baseline(
     """
     logger.debug("START ...")
     logger.info(f"[Baseline] Starting | log_target={log_target} | cv_splits={n_splits}")
-    console.rule("[bold blue]Baseline — Mean Predictor[/bold blue]")
+    print(f"\n{'='*60}\n  Baseline -- Mean Predictor\n{'='*60}")
 
     y_train = np.asarray(y_train)
     y_val   = np.asarray(y_val)
@@ -351,16 +347,15 @@ def run_baseline(
       f"Val MAE=${val_mae:,.0f} | Val RMSE={val_rmse:.4f}"
     )
 
-    # Rich summary panel
     summary = (
-      f"Strategy     : predict mean of training set\n"
-      f"Log target   : {log_target}\n\n"
-      f"CV  MAE      : [bold yellow]${cv_mae_mean:>12,.0f} ± ${cv_mae_std:,.0f}[/bold yellow]\n"
-      f"CV  RMSE     : {cv_rmse_mean:.4f} ± {cv_rmse_std:.4f}\n\n"
-      f"Val MAE      : [bold yellow]${val_mae:>12,.0f}[/bold yellow]\n"
-      f"Val RMSE     : {val_rmse:.4f}"
+      f"  Strategy     : predict mean of training set\n"
+      f"  Log target   : {log_target}\n\n"
+      f"  CV  MAE      : ${cv_mae_mean:>12,.0f} +/- ${cv_mae_std:,.0f}\n"
+      f"  CV  RMSE     : {cv_rmse_mean:.4f} +/- {cv_rmse_std:.4f}\n\n"
+      f"  Val MAE      : ${val_mae:>12,.0f}\n"
+      f"  Val RMSE     : {val_rmse:.4f}"
     )
-    console.print(Panel(summary, title="Baseline Results", expand=False, border_style="yellow"))
+    print(f"\n  Baseline Results\n  {'-'*40}\n{summary}\n")
 
     logger.debug("... FINISH")
     return {
@@ -429,7 +424,7 @@ n_splits: int = 5,
     logger.info(
       f"[SelectKBest] Starting | k={k} | log_target={log_target} | cv_splits={n_splits}"
     )
-    console.rule("[bold blue]SelectKBest — Mutual Information Feature Selection + LinearRegression[/bold blue]")
+    print(f"\n{'='*60}\n  SelectKBest -- Mutual Information + LinearRegression\n{'='*60}")
 
     y_train = np.asarray(y_train)
     y_val   = np.asarray(y_val)
@@ -470,17 +465,16 @@ n_splits: int = 5,
       f"Val MAE=${val_mae:,.0f} | Val RMSE={val_rmse:.4f}"
     )
 
-    # Rich summary panel
     summary = (
-      f"Strategy      : SelectKBest (mutual_info_regression) → LinearRegression\n"
-      f"Features kept : {k} / {X_train.shape[1]}\n"
-      f"Log target    : {log_target}\n\n"
-      f"CV  MAE       : [bold yellow]${cv_res['mae_mean']:>12,.0f} ± ${cv_res['mae_std']:,.0f}[/bold yellow]\n"
-      f"CV  RMSE      : {cv_res['rmse_mean']:.4f} ± {cv_res['rmse_std']:.4f}\n\n"
-      f"Val MAE       : [bold yellow]${val_mae:>12,.0f}[/bold yellow]\n"
-      f"Val RMSE      : {val_rmse:.4f}"
+      f"  Strategy      : SelectKBest (mutual_info_regression) + LinearRegression\n"
+      f"  Features kept : {k} / {X_train.shape[1]}\n"
+      f"  Log target    : {log_target}\n\n"
+      f"  CV  MAE       : ${cv_res['mae_mean']:>12,.0f} +/- ${cv_res['mae_std']:,.0f}\n"
+      f"  CV  RMSE      : {cv_res['rmse_mean']:.4f} +/- {cv_res['rmse_std']:.4f}\n\n"
+      f"  Val MAE       : ${val_mae:>12,.0f}\n"
+      f"  Val RMSE      : {val_rmse:.4f}"
     )
-    console.print(Panel(summary, title="SelectKBest Results", expand=False, border_style="cyan"))
+    print(f"\n  SelectKBest Results\n  {'-'*40}\n{summary}\n")
 
     logger.debug("... FINISH")
     return {
@@ -553,8 +547,8 @@ def run_hyperparam_tuning(
     """
     logger.debug("START ...")
     logger.info(f"[{model_name}] Tuning started | trials={num_trials} | cv_splits={n_cv_splits}")
-    console.rule(f"[bold blue]{model_name} — Tuning Started[/bold blue]")
-    console.print(f"  {num_trials} Optuna trials · {n_cv_splits}-fold CV · objective: RMSE\n")
+    print(f"\n{'='*60}\n  {model_name} -- Tuning Started\n{'='*60}")
+    print(f"  {num_trials} Optuna trials | {n_cv_splits}-fold CV | objective: RMSE\n")
 
     # ------------------------------------------------------------------
     # Objective closure — captures pproc_pipeline directly from outer
@@ -671,15 +665,15 @@ def run_hyperparam_tuning(
             ),
         )
 
-        # Rich summary panel shown in the notebook on completion
-        console.rule(f"[bold green]{model_name} — Tuning Complete[/bold green]")
+        print(f"\n{'='*60}\n  {model_name} -- Tuning Complete\n{'='*60}")
         summary = (
-            f"Best CV RMSE : [bold green]{best_rmse:.4f}[/bold green]\n"
-            f"Val RMSE     : [bold]{val_rmse:.4f}[/bold]\n"
-            f"Val R²       : [bold]{val_r2:.4f}[/bold]\n"
-            f"Val MAE      : [bold yellow]${val_mae:>12,.0f}[/bold yellow]"
+            f"  Best CV RMSE : {best_rmse:.4f}\n"
+            f"  Val RMSE     : {val_rmse:.4f}\n"
+            f"  Val R2       : {val_r2:.4f}\n"
+            f"  Val MAE      : ${val_mae:>12,.0f}"
         )
-        console.print(Panel(summary, expand=False, border_style="green"))
+        print(summary)
+        print()
 
         metrics = {
             "cv_rmse_mean": best_rmse,
@@ -869,10 +863,10 @@ def save_model(model, model_path: str) -> None:
 # Analysis, Comparison & Visualisation Utilities
 #
 # Logging strategy used throughout:
-#   logger.info()  → persisted to log file AND rendered via RichHandler
-#                    (use for scalar facts: scores, counts, param values)
-#   console.*()    → rich-only structured output: tables, rules, panels
-#                    (use for formatted display that has no log-file value)
+#   logger.info()  -> persisted to log file AND rendered via console handler
+#                     (use for scalar facts: scores, counts, param values)
+#   print()        -> structured display output: tables, separators, panels
+#                     (use for formatted display that has no log-file value)
 # ===========================================================================
 
 def get_runs_df(experiment_id: str) -> pd.DataFrame:
@@ -928,53 +922,38 @@ def print_study_summary(studies: dict) -> None:
     Display a structured summary for one or more completed Optuna studies.
 
     Logs key scalar facts (best RMSE, trial count) via logger so they are
-    captured in the log file. Renders the best-params breakdown as a rich
-    table — structured layout that adds no value in a log file.
+    captured in the log file. Prints the best-params breakdown as a plain
+    fixed-width table.
 
     Parameters
     ----------
     studies : dict[str, optuna.Study]
-        Mapping of model name → completed study.
+        Mapping of model name to completed study.
         e.g. {"XGBoost": study_xgb, "Lasso": study_lasso}
     """
     logger.debug("START ...")
     for model_name, study in studies.items():
 
-        # Scalar facts → logger (file + console via RichHandler)
         logger.info(
             f"[{model_name}] best_cv_rmse={study.best_value:.4f} | "
             f"best_trial=#{study.best_trial.number} | "
             f"total_trials={len(study.trials)}"
         )
 
-        # Section separator — console only, no log-file value
-        console.rule(f"[bold blue]{model_name} — Study Summary[/bold blue]")
-
-        # Key scalars as a compact panel
+        print(f"\n{'='*60}\n  {model_name} -- Study Summary\n{'='*60}")
         summary = (
-            f"Best CV RMSE : [bold green]{study.best_value:.4f}[/bold green]\n"
-            f"Best trial # : [bold]#{study.best_trial.number}[/bold]\n"
-            f"Total trials : [bold]{len(study.trials)}[/bold]"
+            f"  Best CV RMSE : {study.best_value:.4f}\n"
+            f"  Best trial # : #{study.best_trial.number}\n"
+            f"  Total trials : {len(study.trials)}"
         )
-        console.print(Panel(summary, expand=False, border_style="blue"))
+        print(summary)
 
-        # Best params table — one row per param
-        table = Table(
-            title="Best Parameters",
-            box=box.SIMPLE_HEAD,
-            show_header=True,
-            header_style="bold cyan",
-            title_style="bold",
-            min_width=40,
-        )
-        table.add_column("Parameter",  style="dim")
-        table.add_column("Best Value", justify="right")
-
+        print(f"\n  {'Parameter':<30}  {'Best Value':>15}")
+        print(f"  {'-'*47}")
         for param, value in study.best_params.items():
             logger.debug(f"  [{model_name}] {param} = {value}")
-            table.add_row(param, str(value))
-
-        console.print(table)
+            print(f"  {param:<30}  {str(value):>15}")
+        print()
     logger.debug("... FINISH")
 
 
@@ -982,8 +961,8 @@ def print_trials_summary(study: optuna.Study, model_name: str, top_n: int = 10) 
     """
     Display the top-N trials from a completed study ranked by CV RMSE.
 
-    Each trial's rank and score is logged via logger for file persistence.
-    The ranked table is rendered via console for structured display.
+    Each trial's rank and score is logged via logger for file persistence
+    and printed as a plain fixed-width table.
 
     Parameters
     ----------
@@ -1008,27 +987,15 @@ def print_trials_summary(study: optuna.Study, model_name: str, top_n: int = 10) 
 
     logger.info(f"[{model_name}] Top-{top_n} trials by CV RMSE:")
 
-    console.rule(f"[bold blue]{model_name} — Top {top_n} Trials[/bold blue]")
-
-    table = Table(
-        box=box.SIMPLE_HEAD,
-        show_header=True,
-        header_style="bold cyan",
-    )
-    table.add_column("Rank",    justify="right", style="dim")
-    table.add_column("Trial #", justify="right")
-    table.add_column("CV RMSE", justify="right", style="bold green")
-
+    print(f"\n{'='*60}\n  {model_name} -- Top {top_n} Trials\n{'='*60}")
+    print(f"  {'Rank':>4}  {'Trial #':>7}  {'CV RMSE':>10}")
+    print(f"  {'-'*25}")
     for rank, (_, row) in enumerate(completed.iterrows(), start=1):
         trial_num = int(row['number'])
         rmse      = row['value']
-
-        # Log each entry so rankings are captured in the log file
         logger.info(f"  [{model_name}] Rank {rank:>2} | Trial #{trial_num} | RMSE={rmse:.4f}")
-
-        table.add_row(str(rank), str(trial_num), f"{rmse:.4f}")
-
-    console.print(table)
+        print(f"  {rank:>4}  {trial_num:>7}  {rmse:.4f}")
+    print()
     logger.debug("... FINISH")
 
 
@@ -1037,10 +1004,9 @@ def print_runs_comparison(experiment_id: str) -> None:
     Display a cross-model comparison table fetched from MLflow.
 
     Pulls all parent-level runs for the experiment, sorts by val_rmse, and
-    renders a rich table with an overfitting indicator (train_rmse - val_rmse).
-
-    The winner (lowest val_rmse) is highlighted in bold green. The overfit
-    gap is colour-coded: green within tolerance, red if gap exceeds 5000.
+    prints a plain fixed-width table with an overfitting indicator
+    (train_rmse - val_rmse). The best model (rank 1) is marked with an asterisk.
+    Rows where the overfit gap exceeds 5000 are flagged with HIGH.
 
     Parameters
     ----------
@@ -1052,27 +1018,15 @@ def print_runs_comparison(experiment_id: str) -> None:
 
     if df.empty:
         logger.warning(f"No runs found for experiment_id={experiment_id}")
-        console.print("[yellow]No runs found — have any tuning functions been run yet?[/yellow]")
+        print("  No runs found -- have any tuning functions been run yet?")
         return
 
     logger.info(f"Model comparison | {len(df)} runs | experiment_id={experiment_id}")
 
-    console.rule("[bold blue]Model Comparison — best val RMSE first[/bold blue]")
-
-    table = Table(
-        box=box.SIMPLE_HEAD,
-        show_header=True,
-        header_style="bold cyan",
-        caption="Overfit gap = train_rmse − val_rmse  ·  [green]green[/green] ≤ 5000  [red]red[/red] > 5000",
-        caption_style="dim",
-    )
-    table.add_column("Rank",        justify="right", style="dim")
-    table.add_column("Model",       justify="left")
-    table.add_column("CV RMSE",     justify="right")
-    table.add_column("Val RMSE",    justify="right")
-    table.add_column("Val R²",      justify="right")
-    table.add_column("Train RMSE",  justify="right")
-    table.add_column("Overfit gap", justify="right")
+    print(f"\n{'='*60}\n  Model Comparison -- best val RMSE first\n{'='*60}")
+    print(f"  Note: overfit gap = train_rmse - val_rmse  (* = best  HIGH = gap > 5000)\n")
+    print(f"  {'':1}  {'Rank':>4}  {'Model':<20}  {'CV RMSE':>8}  {'Val RMSE':>9}  {'Val R2':>6}  {'Train RMSE':>10}  {'Gap':>8}")
+    print(f"  {'-'*75}")
 
     for rank, (_, row) in enumerate(df.iterrows(), start=1):
         model_name = row.get('model',      '?')
@@ -1081,34 +1035,20 @@ def print_runs_comparison(experiment_id: str) -> None:
         val_r2     = row.get('val_r2',     float('nan'))
         train_rmse = row.get('train_rmse', float('nan'))
         gap        = train_rmse - val_rmse
+        gap_flag   = " HIGH" if abs(gap) > 5000 else "     "
+        winner     = "*" if rank == 1 else " "
 
-        # Colour-code the gap — large positive gap signals overfitting
-        gap_str = (
-            f"[red]{gap:.1f}[/red]"
-            if abs(gap) > 5000
-            else f"[green]{gap:.1f}[/green]"
-        )
-
-        # Highlight the best model (rank 1) in bold green
-        name_str = f"[bold]{model_name}[/bold]" if rank == 1 else model_name
-        val_str  = f"[bold green]{val_rmse:.1f}[/bold green]" if rank == 1 else f"{val_rmse:.1f}"
-
-        # Log each row so the comparison is captured in the log file
         logger.info(
             f"  Rank {rank} | {model_name} | "
             f"cv_rmse={cv_rmse:.1f} | val_rmse={val_rmse:.1f} | "
             f"val_r2={val_r2:.4f} | gap={gap:.1f}"
         )
 
-        table.add_row(
-            str(rank),
-            name_str,
-            f"{cv_rmse:.1f}",
-            val_str,
-            f"{val_r2:.4f}",
-            f"{train_rmse:.1f}",
-            gap_str,
+        print(
+            f"  {winner} {rank:>4}  {model_name:<20}  "
+            f"{cv_rmse:>8.1f}  {val_rmse:>9.1f}  "
+            f"{val_r2:>6.4f}  {train_rmse:>10.1f}  {gap:>8.1f}{gap_flag}"
         )
 
-    console.print(table)
+    print()
     logger.debug("... FINISH")

@@ -1,5 +1,5 @@
 import matplotlib.pyplot as plt
-import matplotlib.ticker as mticker
+import matplotlib.ticker as m_ticker
 import os
 from IPython.display import display, FileLink
 import seaborn as sns
@@ -7,7 +7,7 @@ import pandas as pd
 from sklearn.feature_selection import mutual_info_regression
 
 from src.config.settings import MPL_STYLE_FILE, CATEGORICAL_CARDINALITY_THRESHOLD_TYPE_ABS, CATEGORICAL_CARDINALITY_THRESHOLD_TYPE_PCT
-from src.utils.io import save_file, save_and_show_link, get_current_timestamp
+from src.utils.io import save_and_show_link, get_current_timestamp
 from src.utils.logging import get_logger
 
 logger = get_logger()
@@ -713,7 +713,7 @@ def plot_model_comparison(
     ax.set_title('Compare Models — CV MAE Folds', fontsize=14)
     ax.set_ylabel('MAE (dollars)', fontsize=12)
     ax.yaxis.set_major_formatter(
-        mticker.FuncFormatter(lambda x, _: f'${x:,.0f}')
+        m_ticker.FuncFormatter(lambda x, _: f'${x:,.0f}')
     )
 
     plt.tight_layout()

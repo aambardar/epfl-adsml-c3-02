@@ -1,42 +1,33 @@
 """
 Centralised logging and console output for the project.
 
-Provides two shared singletons with different access patterns reflecting
-their different initialisation needs:
-
-    console              → rich.Console, ready immediately, import directly.
-                           Use for structured output: tables, rules, panels.
-
-    logger = get_logger()→ standard Python logger, lazy-initialised on first
-                           call. Dual-output:
-                             - file   : plain text, DEBUG+, full timestamps
-                             - console: RichHandler, INFO+, coloured output
+Provides a lazy-initialised logger singleton via get_logger(). On first call,
+setup_logging() configures two handlers: a file handler (always) and a console
+handler (RichHandler if rich is installed, plain StreamHandler otherwise).
 
 Usage in any module:
-    from src.utils.logging import get_logger, console
+    from src.utils.logging import get_logger
 
     logger = get_logger()
-    console.print(...)       # no getter needed — console is always ready
-    logger.info(...)         # routed to both file and rich console handler
+    logger.info(...)
 """
 
 import logging
 import os
+import sys
 
-from rich.console import Console
-from rich.logging import RichHandler
+try:
+    from rich.console import Console
+    from rich.logging import RichHandler
+    _RICH_AVAILABLE = True
+except ImportError:
+    _RICH_AVAILABLE = False
 
 from src.config.settings import (
     LOG_FILE, PATH_OUT_LOGS,
     LOG_ROOT_LEVEL, LOG_FILE_LEVEL, LOG_CONSOLE_LEVEL,
     PROJECT_NAME
 )
-
-# ---------------------------------------------------------------------------
-# console — instantiated immediately, safe to import and use directly.
-# Shared across all modules so all rich output goes to the same stream.
-# ---------------------------------------------------------------------------
-console = Console()
 
 # ---------------------------------------------------------------------------
 # logger — starts as None. Not ready until setup_logging() runs via
@@ -50,21 +41,19 @@ def setup_logging():
     Initialise and return the project logger with two handlers.
 
     Do not call directly — get_logger() calls this once lazily on first
-    access and caches the result in the module-level `logger` sentinel.
+    access and caches the result in the module-level logger sentinel.
 
     Handlers
     --------
-    FileHandler   : Plain text, full timestamps, DEBUG+ → LOG_FILE.
-                    Persists across notebook restarts.
-    RichHandler   : Colour-coded levels, INFO+ → console/notebook output.
-                    Uses the shared module-level Console instance so all
-                    rich output (logger + console.print) goes to one stream.
+    FileHandler     : Plain text, full timestamps, DEBUG+ to LOG_FILE.
+                      Persists across notebook restarts.
+    Console handler : RichHandler if rich is installed, StreamHandler otherwise.
+                      INFO+ to stdout.
 
     Returns
     -------
     logging.Logger
     """
-    # Ensure the logs output directory exists before opening the file handler
     os.makedirs(PATH_OUT_LOGS, exist_ok=True)
 
     _logger = logging.getLogger(PROJECT_NAME)
@@ -85,18 +74,26 @@ def setup_logging():
         datefmt='%Y-%m-%d %H:%M:%S'
     ))
 
-    # Console handler — replaces plain StreamHandler with rich-formatted output
-    rich_handler = RichHandler(
-        level=getattr(logging, LOG_CONSOLE_LEVEL),
-        console=console,        # shared Console instance — one output stream
-        show_time=True,
-        show_path=False,        # hides file:line — keeps output concise
-        markup=True,            # enables [bold], [red] etc. in log messages
-        rich_tracebacks=True,   # renders exceptions with rich formatting
-    )
+    # Console handler — rich if available, plain StreamHandler otherwise
+    if _RICH_AVAILABLE:
+        console_handler = RichHandler(
+            level=getattr(logging, LOG_CONSOLE_LEVEL),
+            console=Console(),
+            show_time=True,
+            show_path=False,
+            markup=True,
+            rich_tracebacks=True,
+        )
+    else:
+        console_handler = logging.StreamHandler(sys.stdout)
+        console_handler.setLevel(getattr(logging, LOG_CONSOLE_LEVEL))
+        console_handler.setFormatter(logging.Formatter(
+            '[%(asctime)s][%(levelname)s] %(message)s',
+            datefmt='%H:%M:%S'
+        ))
 
     _logger.addHandler(file_handler)
-    _logger.addHandler(rich_handler)
+    _logger.addHandler(console_handler)
 
     _logger.debug("Logging system initialised")
     return _logger
