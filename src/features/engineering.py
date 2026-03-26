@@ -1,3 +1,6 @@
+"""
+engineering.py — Data preprocessing & EDA helper module.
+"""
 import pandas as pd
 from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline

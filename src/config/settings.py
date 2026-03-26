@@ -1,3 +1,6 @@
+"""
+settings.py — Config module.
+"""
 from pathlib import Path
 
 # Project name
@@ -38,6 +41,9 @@ CATEGORICAL_IMPUTATION_STRATEGY = 'most_frequent'  # Options: 'most_frequent', '
 # Path for saving models
 MODEL_FILENAME = 'trained_model.pkl'
 BEST_MODEL_PATH   = PATH_OUT_MODELS / MODEL_FILENAME
+
+# MLflow configuration
+MLFLOW_TRACKING_URI = f"sqlite:///{PROJECT_ROOT / 'outputs' / 'logs' / 'mlflow.db'}"
 
 # Other configurations
 RANDOM_STATE = 43

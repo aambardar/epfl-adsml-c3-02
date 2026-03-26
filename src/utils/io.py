@@ -1,3 +1,6 @@
+"""
+io.py — File I/O utility module.
+"""
 import matplotlib.pyplot as plt
 import os
 from IPython.display import display, FileLink

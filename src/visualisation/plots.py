@@ -1,3 +1,6 @@
+"""
+plots.py — Visualisation and plotting utility module.
+"""
 import matplotlib.pyplot as plt
 import matplotlib.ticker as m_ticker
 import os

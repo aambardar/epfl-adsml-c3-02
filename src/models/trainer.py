@@ -1,15 +1,5 @@
 """
 trainer.py — Model training and hyperparameter tuning module.
-
-Design principles:
-  - One generic `run_hyperparam_tuning` replaces model-specific functions.
-    Model-specific logic lives in small `*_param_space` and `build_*` functions.
-  - TPE sampler (Optuna default) replaces RandomSampler for smarter search.
-  - CV mean + std both logged; objective is RMSE (same scale as SalePrice).
-  - Logging dual-channel: structured file logs via project logger +
-    print statements for key notebook milestones (start, new best, summary).
-  - RandomForestRegressor used (not Classifier) — this is a regression task.
-  - All functions have docstrings; no commented-out print blocks.
 """
 
 import os
@@ -29,7 +19,7 @@ from sklearn.metrics import mean_squared_error, r2_score, mean_absolute_error
 from sklearn.model_selection import KFold
 import xgboost
 
-from src.config.settings import RANDOM_STATE, PROJECT_NAME
+from src.config.settings import RANDOM_STATE, PROJECT_NAME, MLFLOW_TRACKING_URI
 from src.features.engineering import create_final_pipeline
 from src.utils.logging import get_logger
 from src.visualisation.plots import plot_residuals, save_and_show_link
@@ -775,7 +765,7 @@ def get_or_create_experiment(experiment_name: str) -> str:
     return mlflow.create_experiment(experiment_name)
 
 
-def set_mlflow_uri(uri_value: str) -> None:
+def set_mlflow_uri(uri_value: str = MLFLOW_TRACKING_URI) -> None:
     """
     Set the MLflow tracking URI — i.e. where run data is stored.
 
