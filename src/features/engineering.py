@@ -19,9 +19,6 @@ logger = get_logger()
 
 # Custom Transformer: converts year columns to age (reference_year_ - year_value).
 class YearTransformer(BaseEstimator, TransformerMixin):
-    def __init__(self):
-        pass
-
     def fit(self, X, y=None):
         """Capture column names, input shape, and reference year from training data."""
         # Store column names for consistent numpy input handling in transform
@@ -139,35 +136,15 @@ def get_cols_as_tuple(feat_categories):
         Flat tuple of alternating column lists and counts, 16 elements total.
     """
     logger.debug("START ...")
-    cols_num_continuous = feat_categories.get("numerical_continuous")
-    n_num_continuous = len(cols_num_continuous)
-
-    cols_num_discrete = feat_categories.get("numerical_discrete")
-    n_num_discrete = len(cols_num_discrete)
-
-    cols_cat_nominal = feat_categories.get("categorical_nominal")
-    n_cat_nominal = len(cols_cat_nominal)
-
-    cols_cat_ordinal = feat_categories.get("categorical_ordinal")
-    n_cat_ordinal = len(cols_cat_ordinal)
-
-    cols_object = feat_categories.get("object")
-    n_object = len(cols_object)
-
-    cols_temporal = feat_categories.get("temporal")
-    n_temporal = len(cols_temporal)
-
-    cols_binary = feat_categories.get("binary")
-    n_binary = len(cols_binary)
-
-    cols_low_cardinality = feat_categories.get("low_cardinality")
-    n_low_cardinality = len(cols_low_cardinality)
-
-    logger.debug("... FINISH")
-
-    return (cols_num_continuous, n_num_continuous, cols_num_discrete, n_num_discrete, cols_cat_nominal, n_cat_nominal,
-            cols_cat_ordinal, n_cat_ordinal, cols_object, n_object, cols_temporal, n_temporal, cols_binary, n_binary, cols_low_cardinality, n_low_cardinality)
-
+    category_order = [
+        "numerical_continuous", "numerical_discrete", "categorical_nominal",
+        "categorical_ordinal", "object", "temporal", "binary", "low_cardinality",
+    ]
+    result = []
+    for key in category_order:
+        cols = feat_categories.get(key)
+        result.extend([cols, len(cols)])
+    return tuple(result)
 
 def _is_low_cardinality(col, df, threshold_type, n_cat_threshold):
     """Returns True if column cardinality is below the threshold."""

@@ -34,10 +34,6 @@ TEST_FILE = PATH_DATA_RAW / TEST_FILENAME
 # Stylesheet configurations
 MPL_STYLE_FILE    = PROJECT_ROOT / 'src' / 'config' / 'custom_mpl_stylesheet.mplstyle'
 
-# Feature Engineering configuration
-NUMERICAL_IMPUTATION_STRATEGY = 'mean'  # Options: 'mean', 'median', 'most_frequent'
-CATEGORICAL_IMPUTATION_STRATEGY = 'most_frequent'  # Options: 'most_frequent', 'constant'
-
 # Path for saving models
 MODEL_FILENAME = 'trained_model.pkl'
 BEST_MODEL_PATH   = PATH_OUT_MODELS / MODEL_FILENAME

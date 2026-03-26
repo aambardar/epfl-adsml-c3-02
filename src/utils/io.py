@@ -3,6 +3,7 @@ io.py — File I/O utility module.
 """
 import matplotlib.pyplot as plt
 import os
+from pathlib import Path
 from IPython.display import display, FileLink
 from datetime import datetime
 import joblib
@@ -32,9 +33,7 @@ def save_and_show_link(fig_to_save, filename, base_dir=PATH_OUT_VISUALS, dpi=100
     os.makedirs(base_dir, exist_ok=True)
 
     # Get absolute paths
-    notebook_dir = os.getcwd()
-    full_base_dir = os.path.abspath(os.path.join(notebook_dir, base_dir))
-    full_filepath = os.path.join(full_base_dir, filename)
+    full_filepath = Path(base_dir) / filename
 
     print(f"Saving figure to {full_filepath}")
 
@@ -60,7 +59,7 @@ def get_current_timestamp():
     logger.debug("... FINISH")
     return timestamp
 
-def save_file(file_type_to_save, filename, base_dir_path, data):
+def save_file(file_type_to_save, filename, base_dir, data):
     """
     Save data to disk in the format matching the given file type.
 
@@ -73,27 +72,23 @@ def save_file(file_type_to_save, filename, base_dir_path, data):
         One of 'feature', 'model', 'hyperparams', 'metrics'.
     filename : str
         Output filename.
-    base_dir_path : str or Path
+    base_dir : str or Path
         Destination directory.
     data : object
         Content to save; type depends on file_type_to_save.
     """
     logger.debug("START ...")
-    os.makedirs(base_dir_path, exist_ok=True)
+    os.makedirs(base_dir, exist_ok=True)
 
     # Get absolute paths
-    notebook_dir = os.getcwd()
-    full_base_dir = os.path.abspath(os.path.join(notebook_dir, base_dir_path))
-    full_filepath = os.path.join(full_base_dir, filename)
+    full_filepath = Path(base_dir) / filename
 
+    logger.info(f'Saving {file_type_to_save} file with filename as {filename} to path {full_filepath}')
     if file_type_to_save == 'feature':
-        logger.info(f'Saving {file_type_to_save} file with filename as {filename} to path {full_filepath}')
         data.to_csv(full_filepath, index=False, header=False)
     elif file_type_to_save == 'model':
-        logger.info(f'Saving {file_type_to_save} file with filename as {filename} to path {full_filepath}')
         joblib.dump(data, full_filepath)
     elif file_type_to_save == 'hyperparams':
-        logger.info(f'Saving {file_type_to_save} file with filename as {filename} to path {full_filepath}')
         data.to_csv(full_filepath, index=False)
     elif file_type_to_save == 'metrics':
         logger.info(f'Saving metrics into file {filename} at path {full_filepath}')

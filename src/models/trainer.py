@@ -12,6 +12,7 @@ import mlflow.xgboost
 import numpy as np
 import optuna
 import pandas as pd
+from sklearn.dummy import DummyRegressor
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.feature_selection import SelectKBest, mutual_info_regression
 from sklearn.linear_model import Lasso, LinearRegression
@@ -31,7 +32,6 @@ logger = get_logger()
 # while suppressing per-trial debug noise. Flip to ERROR for silent runs.
 # ---------------------------------------------------------------------------
 OPTUNA_LOG_LEVEL = optuna.logging.WARNING
-
 
 # ===========================================================================
 # Model-specific parameter spaces
@@ -133,7 +133,6 @@ def champion_callback(study: optuna.Study, frozen_trial: optuna.trial.FrozenTria
         else:
             msg = f"Trial {frozen_trial.number}: initial best RMSE {current_rmse:.4f}"
 
-        logger.info(msg)
         print(f"  >> New best -- {msg}")
 
 
@@ -141,12 +140,12 @@ def champion_callback(study: optuna.Study, frozen_trial: optuna.trial.FrozenTria
 # Cross-validation helper
 # ===========================================================================
 def _cross_val_scores(
-model,
-X_train: pd.DataFrame | np.ndarray,
-y_train: np.ndarray,
-n_splits: int = 5,
-log_target: bool = False,
-features: list[str] | None = None,
+        model,
+        X_train: pd.DataFrame | np.ndarray,
+        y_train: np.ndarray,
+        n_splits: int = 5,
+        log_target: bool = False,
+        features: list[str] | None = None,
 ) -> dict:
     """
     Run KFold cross-validation and return per-fold RMSE and MAE scores.
@@ -251,10 +250,10 @@ features: list[str] | None = None,
 # ===========================================================================
 
 def run_baseline(
-  y_train: np.ndarray,
-  y_val: np.ndarray,
-  log_target: bool = False,
-  n_splits: int = 5,
+        y_train: np.ndarray,
+        y_val: np.ndarray,
+        log_target: bool = False,
+        n_splits: int = 5,
 ) -> dict:
     """
     Evaluate a mean-prediction baseline via cross-validation.
@@ -295,80 +294,58 @@ def run_baseline(
     y_train = np.asarray(y_train)
     y_val   = np.asarray(y_val)
 
-    kf = KFold(n_splits=n_splits, shuffle=True, random_state=RANDOM_STATE)
-    fold_mae, fold_rmse = [], []
-
-    for fold, (train_idx, val_idx) in enumerate(kf.split(y_train), start=1):
-      y_tr, y_vl = y_train[train_idx], y_train[val_idx]
-
-      # Baseline prediction: mean of the fold's training split
-      fold_mean = np.mean(y_tr)
-      # Using full_like to create a new array with the same shape as y_val, but filled entirely with a constant value.
-      preds     = np.full_like(y_vl, fill_value=fold_mean, dtype=float)
-
-      # Back-transform to dollars before scoring if target is log-scale
-      preds_dollars = np.exp(preds) if log_target else preds
-      actuals_dollars = np.exp(y_vl) if log_target else y_vl
-
-      fold_mae.append(mean_absolute_error(actuals_dollars, preds_dollars))  # MAE in dollars
-      fold_rmse.append(np.sqrt(mean_squared_error(y_vl, preds)))  # RMSE in training scale
-
-      logger.debug(
-          f"[Baseline] Fold {fold} | MAE=${fold_mae[-1]:,.0f} | RMSE={fold_rmse[-1]:.4f}"
-      )
-
-    cv_mae_mean  = float(np.mean(fold_mae))
-    cv_mae_std   = float(np.std(fold_mae))
-    cv_rmse_mean = float(np.mean(fold_rmse))
-    cv_rmse_std  = float(np.std(fold_rmse))
+    # CV evaluation — DummyRegressor ignores X; reshape to satisfy sklearn's 2D requirement
+    cv_res = _cross_val_scores(
+        DummyRegressor(strategy='mean'), y_train.reshape(-1, 1), y_train, n_splits, log_target
+    )
 
     # Validation set evaluation
-    val_mean          = np.mean(y_train)
-    val_preds         = np.full_like(y_val, fill_value=val_mean, dtype=float)
-    val_preds_dollars   = np.exp(val_preds) if log_target else val_preds
-    val_actuals_dollars = np.exp(y_val)     if log_target else y_val
+    dummy = DummyRegressor(strategy='mean').fit(y_train.reshape(-1, 1), y_train)
+    val_preds = dummy.predict(y_val.reshape(-1, 1))
+    val_preds_dollars = np.exp(val_preds) if log_target else val_preds
+    val_actuals_dollars = np.exp(y_val) if log_target else y_val
 
-    val_mae  = mean_absolute_error(val_actuals_dollars, val_preds_dollars)
+    val_mae = mean_absolute_error(val_actuals_dollars, val_preds_dollars)
     val_rmse = np.sqrt(mean_squared_error(y_val, val_preds))
 
     logger.info(
-      f"[Baseline] CV MAE=${cv_mae_mean:,.0f} ± ${cv_mae_std:,.0f} | "
-      f"CV RMSE={cv_rmse_mean:.4f} ± {cv_rmse_std:.4f} | "
-      f"Val MAE=${val_mae:,.0f} | Val RMSE={val_rmse:.4f}"
+        f"[Baseline] CV MAE=${cv_res['mae_mean']:,.0f} ± ${cv_res['mae_std']:,.0f} | "
+        f"CV RMSE={cv_res['rmse_mean']:.4f} ± {cv_res['rmse_std']:.4f} | "
+        f"Val MAE=${val_mae:,.0f} | Val RMSE={val_rmse:.4f}"
     )
 
     summary = (
-      f"  Strategy     : predict mean of training set\n"
-      f"  Log target   : {log_target}\n\n"
-      f"  CV  MAE      : ${cv_mae_mean:>12,.0f} +/- ${cv_mae_std:,.0f}\n"
-      f"  CV  RMSE     : {cv_rmse_mean:.4f} +/- {cv_rmse_std:.4f}\n\n"
-      f"  Val MAE      : ${val_mae:>12,.0f}\n"
-      f"  Val RMSE     : {val_rmse:.4f}"
+        f"  Strategy     : predict mean of training set\n"
+        f"  Log target   : {log_target}\n\n"
+        f"  CV  MAE      : ${cv_res['mae_mean']:>12,.0f} +/- ${cv_res['mae_std']:,.0f}\n"
+        f"  CV  RMSE     : {cv_res['rmse_mean']:.4f} +/- {cv_res['rmse_std']:.4f}\n\n"
+        f"  Val MAE      : ${val_mae:>12,.0f}\n"
+        f"  Val RMSE     : {val_rmse:.4f}"
     )
-    print(f"\n  Baseline Results\n  {'-'*40}\n{summary}\n")
+    print(f"\n  Baseline Results\n  {'-' * 40}\n{summary}\n")
 
     logger.debug("... FINISH")
     return {
-      "cv_mae_folds": fold_mae,
-      "cv_mae_mean":  cv_mae_mean,
-      "cv_mae_std":   cv_mae_std,
-      "cv_rmse_mean": cv_rmse_mean,
-      "cv_rmse_std":  cv_rmse_std,
-      "val_mae":      val_mae,
-      "val_rmse":     val_rmse,
+        "cv_mae_folds": cv_res['mae_folds'],
+        "cv_mae_mean": cv_res['mae_mean'],
+        "cv_mae_std": cv_res['mae_std'],
+        "cv_rmse_mean": cv_res['rmse_mean'],
+        "cv_rmse_std": cv_res['rmse_std'],
+        "val_mae": val_mae,
+        "val_rmse": val_rmse,
     }
 
 # ===========================================================================
 # SelectKBest feature-selection model
 # ===========================================================================
 def run_simple_model(
-X_train: pd.DataFrame,
-y_train: np.ndarray,
-X_val: pd.DataFrame,
-y_val: np.ndarray,
-k: int = 2,
-log_target: bool = False,
-n_splits: int = 5,
+        X_train: pd.DataFrame,
+        y_train: np.ndarray,
+        X_val: pd.DataFrame,
+        y_val: np.ndarray,
+        k: int = 2,
+        log_target: bool = False,
+        n_splits: int = 5,
 ) -> dict:
     """
     Evaluate a LinearRegression model trained on the top-k MI-scored features.
