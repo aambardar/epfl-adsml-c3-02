@@ -1,20 +1,16 @@
 # House Prices — EPFL ADSML C3
 
 Regression project for the EPFL Applied Data Science and Machine Learning course (Challenge 3).
-The goal is to predict residential property sale prices using the Ames, Iowa housing dataset.
+The goal is to predict residential property sale prices using the housing dataset.
 
 ---
 
 ## Dataset
 
-**Source:** Ames, Iowa Assessor's Office — introduced in De Cock (2011) as a modern alternative to the
-Boston Housing dataset.
+**Source:** House prices dataset assembled and published by Dean De Cock.
 
-- 2,930 observations across 82 variables (23 nominal, 23 ordinal, 14 discrete, 20 continuous)
-- Covers residential property sales in Ames, IA from 2006 to 2010
+- 2,930 observations across 82 variables
 - Target variable: `SalePrice`
-
-Full variable documentation: https://ww2.amstat.org/publications/jse/v19n3/decock/DataDocumentation.txt
 
 ---
 
@@ -23,29 +19,29 @@ Full variable documentation: https://ww2.amstat.org/publications/jse/v19n3/decoc
 ```
 .
 ├── data/
-│   ├── raw/                   # Original train and test CSV files
-│   └── processed/             # Intermediate processed data (if any)
+│   ├── raw/                  # Original train and test CSV files
+│   └── processed/            # Intermediate processed data (if any)
 ├── notebooks/
-│   └── c3_p2_submission.ipynb # Main notebook — end-to-end pipeline
+│   └── c3_submission.ipynb   # Main notebook having end-to-end pipeline
 ├── outputs/
-│   ├── figures/               # Saved plots
-│   ├── logs/                  # Application log and MLflow tracking database
-│   ├── models/                # Saved model artefacts
-│   └── submissions/           # Kaggle-format prediction files
+│   ├── figures/              # Saved plots
+│   ├── logs/                 # Application log and MLflow tracking database
+│   ├── models/               # Saved model artefacts
+│   └── submissions/          # Prediction files
 └── src/
     ├── config/
-    │   └── settings.py        # All project-wide constants and paths
+    │   └── settings.py       # All project-wide constants, configs and paths
     ├── data/
-    │   └── loader.py          # Data loading and train/test merging
+    │   └── loader.py         # Data loading and train/test merging
     ├── features/
-    │   └── engineering.py     # Feature engineering and sklearn pipeline
+    │   └── engineering.py    # Feature engineering and sklearn pipeline
     ├── models/
-    │   └── trainer.py         # Model training, CV evaluation, MLflow logging
+    │   └── trainer.py        # Model training, CV evaluation, MLflow logging
     ├── visualisation/
-    │   └── plots.py           # All plotting functions
+    │   └── plots.py          # All plotting functions
     └── utils/
-        ├── io.py              # File saving helpers
-        └── logging.py         # Logging setup (with optional rich support)
+        ├── io.py             # File saving helpers
+        └── logging.py        # Logging setup (with optional rich support)
 ```
 
 ---
@@ -69,21 +65,9 @@ Full variable documentation: https://ww2.amstat.org/publications/jse/v19n3/decoc
 
 ---
 
-## Setup and Installation
-
-```bash
-git clone <repo-url>
-cd epfl-adsml-c3-02
-pip install scikit-learn xgboost optuna mlflow pandas numpy matplotlib seaborn
-```
-
-`rich` is optional — logging falls back to plain stdout if it is not installed.
-
----
-
 ## How to Run
 
-Open and run `notebooks/c3_p2_submission.ipynb` top to bottom.
+Open and run `notebooks/c3_submission.ipynb` top to bottom.
 
 Before starting a new round of experiments, increment the run version in `src/config/settings.py`:
 
