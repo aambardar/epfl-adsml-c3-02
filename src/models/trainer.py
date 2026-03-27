@@ -20,10 +20,11 @@ from sklearn.metrics import mean_squared_error, r2_score, mean_absolute_error
 from sklearn.model_selection import KFold
 import xgboost
 
-from src.config.settings import RANDOM_STATE, PROJECT_NAME, MLFLOW_TRACKING_URI
+from src.config.settings import RANDOM_STATE, PROJECT_NAME, MLFLOW_TRACKING_URI, PATH_OUT_SUBMISSIONS
 from src.features.engineering import create_final_pipeline
 from src.utils.logging import get_logger
 from src.visualisation.plots import plot_residuals, save_and_show_link
+from src.utils.io import save_file
 
 logger = get_logger()
 
@@ -1019,3 +1020,45 @@ def print_runs_comparison(experiment_id: str) -> None:
 
     print()
     logger.debug("... FINISH")
+
+
+# ===========================================================================
+# Submission helpers
+# ===========================================================================
+
+def create_submission(model, X_test: pd.DataFrame, pid: pd.Series, filename: str, log_target: bool = False) -> pd.DataFrame:
+    """
+    Generate a submission CSV from test-set predictions.
+
+    Predicts on X_test, back-transforms if the model was trained on a
+    log-transformed target, then saves a two-column CSV (PID, SalePrice)
+    to outputs/submissions/.
+
+    Parameters
+    ----------
+    model : fitted sklearn-compatible estimator or pipeline
+    X_test : pd.DataFrame
+        Preprocessed test features (same pipeline as training).
+    pid : pd.Series
+        PID values from the original test CSV, aligned with X_test rows.
+    filename : str
+        Output filename, e.g. 'predictions-simple-model.csv'.
+    log_target : bool
+        If True, applies exp() to predictions before saving. Default False.
+
+    Returns
+    -------
+    pd.DataFrame
+        The submission DataFrame with columns [PID, SalePrice].
+    """
+    logger.debug("START ...")
+
+    preds = model.predict(X_test)
+    if log_target:
+        preds = np.exp(preds)
+
+    submission = pd.DataFrame({"PID": pid.values, "SalePrice": preds})
+    save_file("submission", filename, PATH_OUT_SUBMISSIONS, submission)
+
+    logger.debug("... FINISH")
+    return submission

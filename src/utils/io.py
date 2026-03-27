@@ -69,7 +69,7 @@ def save_file(file_type_to_save, filename, base_dir, data):
     Parameters
     ----------
     file_type_to_save : str
-        One of 'feature', 'model', 'hyperparams', 'metrics'.
+        One of 'feature', 'model', 'hyperparams', 'metrics', 'submission'.
     filename : str
         Output filename.
     base_dir : str or Path
@@ -89,6 +89,8 @@ def save_file(file_type_to_save, filename, base_dir, data):
     elif file_type_to_save == 'model':
         joblib.dump(data, full_filepath)
     elif file_type_to_save == 'hyperparams':
+        data.to_csv(full_filepath, index=False)
+    elif file_type_to_save == 'submission':
         data.to_csv(full_filepath, index=False)
     elif file_type_to_save == 'metrics':
         logger.info(f'Saving metrics into file {filename} at path {full_filepath}')
